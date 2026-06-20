@@ -146,11 +146,17 @@ export function ReminderList({
                 animate={POOF_ANIMATE}
                 exit={POOF_EXIT}
                 transition={POOF_TRANSITION}
+                draggable={!!r.id}
+                onDragStartCapture={(e) => {
+                  e.dataTransfer.setData("text/plain", r.id ?? "");
+                  e.dataTransfer.effectAllowed = "move";
+                }}
                 onContextMenu={(e) => {
                   e.stopPropagation();
                   onContextMenu(e, r);
                 }}
                 className="group flex items-start gap-2.5 rounded-md px-2 py-2 hover:bg-accent"
+                title="Drag onto the planner to schedule"
               >
                 <Checkbox
                   checked={r.completed}

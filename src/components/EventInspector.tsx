@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Trash2, X } from "lucide-react";
 import type { CalendarDto, EventDto, EventInput } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -51,8 +51,10 @@ export function EventInspector({
 }: Props) {
   const editable = calendars.filter((c) => c.editable);
   const [title, setTitle] = useState("");
-  const [start, setStart] = useState(defaultStart());
-  const [end, setEnd] = useState(plusHour(defaultStart()));
+  // Uncontrolled: WebKit doesn't fire React onChange for datetime-local, so we read
+  // these from the DOM at submit instead of tracking them in state.
+  const startRef = useRef<HTMLInputElement>(null);
+  const endRef = useRef<HTMLInputElement>(null);
   const [allDay, setAllDay] = useState(false);
   const [calendarId, setCalendarId] = useState("");
   const [location, setLocation] = useState("");
@@ -62,8 +64,8 @@ export function EventInspector({
     if (!open) return;
     if (event) {
       setTitle(event.title);
-      setStart(toLocalInput(event.start));
-      setEnd(toLocalInput(event.end));
+      if (startRef.current) startRef.current.value = toLocalInput(event.start);
+      if (endRef.current) endRef.current.value = toLocalInput(event.end);
       setAllDay(event.allDay);
       setCalendarId(event.calendarId ?? editable[0]?.id ?? "");
       setLocation(event.location ?? "");
@@ -71,8 +73,9 @@ export function EventInspector({
     } else {
       const s = initialStart ? toLocalInput(initialStart.toISOString()) : defaultStart();
       setTitle("");
-      setStart(s);
-      setEnd(initialEnd ? toLocalInput(initialEnd.toISOString()) : plusHour(s));
+      if (startRef.current) startRef.current.value = s;
+      if (endRef.current)
+        endRef.current.value = initialEnd ? toLocalInput(initialEnd.toISOString()) : plusHour(s);
       setAllDay(false);
       setCalendarId(initialCalendarId ?? editable[0]?.id ?? "");
       setLocation("");
@@ -95,11 +98,13 @@ export function EventInspector({
 
   function submit() {
     if (!title.trim()) return;
+    const startVal = startRef.current?.value || defaultStart();
+    const endVal = endRef.current?.value || plusHour(startVal);
     onSubmit({
       id: event?.id ?? null,
       title: title.trim(),
-      start: localInputToISO(start),
-      end: localInputToISO(end),
+      start: localInputToISO(startVal),
+      end: localInputToISO(endVal),
       allDay,
       calendarId: calendarId || null,
       location: location || null,
@@ -135,22 +140,12 @@ export function EventInspector({
 
         <div className="space-y-1.5">
           <Label htmlFor="ev-start">Starts</Label>
-          <Input
-            id="ev-start"
-            type="datetime-local"
-            value={start}
-            onChange={(e) => setStart(e.target.value)}
-          />
+          <Input id="ev-start" type="datetime-local" ref={startRef} />
         </div>
 
         <div className="space-y-1.5">
           <Label htmlFor="ev-end">Ends</Label>
-          <Input
-            id="ev-end"
-            type="datetime-local"
-            value={end}
-            onChange={(e) => setEnd(e.target.value)}
-          />
+          <Input id="ev-end" type="datetime-local" ref={endRef} />
         </div>
 
         <label className="flex items-center gap-2 text-sm">

@@ -30,6 +30,7 @@ interface Props {
   onUpdateReminderDue: (reminder: ReminderDto, dueLocal: string) => void;
   onEventContextMenu: (e: React.MouseEvent, event: EventDto) => void;
   onReminderContextMenu: (e: React.MouseEvent, reminder: ReminderDto) => void;
+  onDropReminder: (reminderId: string, start: Date) => void;
   workHours: {
     workdayStart: number;
     workdayEnd: number;
@@ -97,6 +98,7 @@ export function TimeGridView({
   onUpdateReminderDue,
   onEventContextMenu,
   onReminderContextMenu,
+  onDropReminder,
   workHours,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -105,6 +107,7 @@ export function TimeGridView({
   const rems = reminders ?? [];
 
   const [drag, setDrag] = useState<DragState | null>(null);
+  const [dropDay, setDropDay] = useState<number | null>(null);
   const dragRef = useRef<DragState | null>(null);
   const setBoth = (d: DragState | null) => {
     dragRef.current = d;
@@ -355,10 +358,21 @@ export function TimeGridView({
                   className={cn(
                     "relative flex-1 border-l border-border",
                     weekendClass(d),
+                    dropDay === dayIndex && "ring-2 ring-inset ring-primary/60",
                   )}
                   onContextMenu={(e) =>
                     onEmptyContextMenu(e, addMinutes(startOfDay(d), minuteFromY(e.clientY)))
                   }
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    if (dropDay !== dayIndex) setDropDay(dayIndex);
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setDropDay(null);
+                    const id = e.dataTransfer.getData("text/plain");
+                    if (id) onDropReminder(id, addMinutes(startOfDay(d), minuteFromY(e.clientY)));
+                  }}
                 >
                   {HOURS.map((h) => (
                     <div

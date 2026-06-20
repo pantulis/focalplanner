@@ -771,6 +771,10 @@ function Planner() {
                 onUpdateReminderDue={updateReminderDue}
                 onEventContextMenu={openEventMenu}
                 onReminderContextMenu={openReminderMenu}
+                onDropReminder={(id, start) => {
+                  const r = (reminders.data ?? []).find((x) => x.id === id);
+                  if (r) updateReminderDue(r, toLocalDateTime(start));
+                }}
                 workHours={{
                   workdayStart: settings.workdayStart,
                   workdayEnd: settings.workdayEnd,

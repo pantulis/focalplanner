@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Circle, CircleCheck, Repeat, Trash2, X } from "lucide-react";
 import type { CalendarDto, ReminderDto, ReminderInput } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -45,7 +45,9 @@ export function ReminderInspector({
 }: Props) {
   const editable = lists.filter((c) => c.editable);
   const [title, setTitle] = useState("");
-  const [due, setDue] = useState("");
+  // Uncontrolled: WebKit doesn't fire React onChange for datetime-local, so we read
+  // the value from the DOM at submit instead of tracking it in state.
+  const dueRef = useRef<HTMLInputElement>(null);
   const [priority, setPriority] = useState(0);
   const [listId, setListId] = useState("");
   const [notes, setNotes] = useState("");
@@ -55,14 +57,14 @@ export function ReminderInspector({
     if (!open) return;
     if (reminder) {
       setTitle(reminder.title);
-      setDue(reminder.due ?? "");
+      if (dueRef.current) dueRef.current.value = reminder.due ?? "";
       setPriority(reminder.priority);
       setListId(reminder.listId ?? editable[0]?.id ?? "");
       setNotes(reminder.notes ?? "");
       setCompleted(reminder.completed);
     } else {
       setTitle("");
-      setDue(initialDue ?? "");
+      if (dueRef.current) dueRef.current.value = initialDue ?? "";
       setPriority(0);
       setListId(initialListId ?? editable[0]?.id ?? "");
       setNotes("");
@@ -94,7 +96,7 @@ export function ReminderInspector({
     onSubmit({
       id: reminder?.id ?? null,
       title: title.trim(),
-      due: due || null,
+      due: dueRef.current?.value || null,
       priority,
       listId: listId || null,
       notes: notes || null,
@@ -163,12 +165,7 @@ export function ReminderInspector({
 
         <div className="space-y-1.5">
           <Label htmlFor="rm-due">Due</Label>
-          <Input
-            id="rm-due"
-            type="datetime-local"
-            value={due}
-            onChange={(e) => setDue(e.target.value)}
-          />
+          <Input id="rm-due" type="datetime-local" ref={dueRef} />
         </div>
 
         <div className="space-y-1.5">
