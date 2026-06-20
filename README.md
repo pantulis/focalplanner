@@ -43,6 +43,23 @@ On first launch the app shows an **Access required** screen. Click **Grant
 access** and approve the macOS Calendar and Reminders permission prompts. (To
 change it later: System Settings → Privacy & Security → Calendars / Reminders.)
 
+## Preference sync (optional)
+
+FocalPlanner can sync your **preferences and areas of focus** across machines via a private
+GitHub Gist, authenticated with GitHub's Device Flow. Your calendar and reminder *data*
+stays in macOS/iCloud and is never uploaded. The OAuth token is stored in the macOS
+Keychain, and an optional passphrase enables end-to-end encryption of the synced blob.
+
+If you build your own copy, register your **own** GitHub OAuth App and use its Client ID —
+the bundled one identifies the upstream app's authorization screen:
+
+1. GitHub → Settings → **Developer settings → OAuth Apps → New OAuth App**.
+2. Set any Homepage / Authorization callback URL (unused by Device Flow) and **enable Device Flow**.
+3. Copy the **Client ID** (starts with `Ov…`) into `GITHUB_CLIENT_ID` in
+   `src-tauri/src/github_sync.rs`, then rebuild.
+
+Sync is entirely optional — the app works fully without connecting GitHub.
+
 ## Build
 
 ```bash
