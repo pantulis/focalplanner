@@ -1,0 +1,628 @@
+import { useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { addMinutes, format, startOfDay } from "date-fns";
+import { Circle, CircleCheck, Repeat } from "lucide-react";
+import type { EventDto, ReminderDto } from "@/lib/api";
+import {
+  DAY_MINUTES,
+  GridBlock,
+  GridBlockKind,
+  HOUR_HEIGHT,
+  clamp,
+  dayAllDayEvents,
+  dayAllDayReminders,
+  dayGridBlocks,
+  isToday,
+  nowOffsetPx,
+} from "@/lib/planner";
+import { cn } from "@/lib/utils";
+import { POOF_ANIMATE, POOF_EXIT, POOF_INITIAL, POOF_TRANSITION } from "@/lib/anim";
+
+interface Props {
+  days: Date[];
+  events: EventDto[] | undefined;
+  reminders: ReminderDto[] | undefined;
+  onEditEvent: (event: EventDto) => void;
+  onEditReminder: (reminder: ReminderDto) => void;
+  onToggleReminder: (reminder: ReminderDto, completed: boolean) => void;
+  onEmptyContextMenu: (e: React.MouseEvent, start: Date) => void;
+  onUpdateTimes: (event: EventDto, startISO: string, endISO: string) => void;
+  onUpdateReminderDue: (reminder: ReminderDto, dueLocal: string) => void;
+  onEventContextMenu: (e: React.MouseEvent, event: EventDto) => void;
+  onReminderContextMenu: (e: React.MouseEvent, reminder: ReminderDto) => void;
+  workHours: {
+    workdayStart: number;
+    workdayEnd: number;
+    weekendStart: number;
+    weekendEnd: number;
+  };
+}
+
+const HOURS = Array.from({ length: 24 }, (_, i) => i);
+const GRID_HEIGHT = 24 * HOUR_HEIGHT;
+const FALLBACK_COLOR = "#3b82f6";
+const SNAP = 15; // minutes
+
+type DragMode = "move" | "resize-start" | "resize-end";
+
+interface DragState {
+  kind: GridBlockKind;
+  dragId: string;
+  event?: EventDto;
+  reminder?: ReminderDto;
+  mode: DragMode;
+  origStartMin: number;
+  origEndMin: number;
+  origDayIndex: number;
+  startMin: number;
+  endMin: number;
+  dayIndex: number;
+  pointerStartY: number;
+}
+
+function tint(color: string | null): string {
+  const c = color ?? FALLBACK_COLOR;
+  return /^#[0-9a-fA-F]{6}$/.test(c) ? `${c}22` : c;
+}
+
+function minutesLabel(min: number): string {
+  const h = Math.floor(min / 60) % 24;
+  const m = min % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+function blockGeometry(startMin: number, endMin: number) {
+  return {
+    top: (startMin / 60) * HOUR_HEIGHT,
+    height: Math.max(((endMin - startMin) / 60) * HOUR_HEIGHT, 18),
+  };
+}
+
+function colStyle(col: number, cols: number) {
+  return {
+    left: `calc(${(col / cols) * 100}% + 1px)`,
+    width: `calc(${(1 / cols) * 100}% - 2px)`,
+  };
+}
+
+export function TimeGridView({
+  days,
+  events,
+  reminders,
+  onEditEvent,
+  onEditReminder,
+  onToggleReminder,
+  onEmptyContextMenu,
+  onUpdateTimes,
+  onUpdateReminderDue,
+  onEventContextMenu,
+  onReminderContextMenu,
+  workHours,
+}: Props) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const colsRef = useRef<HTMLDivElement>(null);
+  const evs = events ?? [];
+  const rems = reminders ?? [];
+
+  const [drag, setDrag] = useState<DragState | null>(null);
+  const dragRef = useRef<DragState | null>(null);
+  const setBoth = (d: DragState | null) => {
+    dragRef.current = d;
+    setDrag(d);
+  };
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      const startHour = Math.min(workHours.workdayStart, workHours.weekendStart);
+      scrollRef.current.scrollTop = Math.max(
+        nowOffsetPx() - 120,
+        startHour * HOUR_HEIGHT - 12,
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const active = drag !== null;
+  useEffect(() => {
+    if (!active) return;
+
+    const onMove = (e: PointerEvent) => {
+      const d = dragRef.current;
+      if (!d) return;
+      const deltaMin =
+        Math.round((e.clientY - d.pointerStartY) / HOUR_HEIGHT * 60 / SNAP) * SNAP;
+      const dur = d.origEndMin - d.origStartMin;
+      let { startMin, endMin, dayIndex } = d;
+
+      if (d.mode === "move") {
+        startMin = clamp(d.origStartMin + deltaMin, 0, DAY_MINUTES - dur);
+        endMin = startMin + dur;
+        if (days.length > 1 && colsRef.current) {
+          const r = colsRef.current.getBoundingClientRect();
+          const colW = r.width / days.length;
+          dayIndex = clamp(
+            Math.floor((e.clientX - r.left) / colW),
+            0,
+            days.length - 1,
+          );
+        }
+      } else if (d.mode === "resize-end") {
+        endMin = clamp(d.origEndMin + deltaMin, d.origStartMin + SNAP, DAY_MINUTES);
+      } else {
+        startMin = clamp(d.origStartMin + deltaMin, 0, d.origEndMin - SNAP);
+      }
+
+      setBoth({ ...d, startMin, endMin, dayIndex });
+    };
+
+    const onUp = () => {
+      const d = dragRef.current;
+      setBoth(null);
+      if (!d) return;
+      const moved =
+        d.startMin !== d.origStartMin ||
+        d.endMin !== d.origEndMin ||
+        d.dayIndex !== d.origDayIndex;
+      const base = startOfDay(days[d.dayIndex]);
+
+      if (d.kind === "reminder") {
+        if (!moved) {
+          if (d.reminder) onEditReminder(d.reminder);
+          return;
+        }
+        onUpdateReminderDue(
+          d.reminder!,
+          format(addMinutes(base, d.startMin), "yyyy-MM-dd'T'HH:mm"),
+        );
+        return;
+      }
+
+      if (!moved) {
+        if (d.event) onEditEvent(d.event);
+        return;
+      }
+      onUpdateTimes(
+        d.event!,
+        addMinutes(base, d.startMin).toISOString(),
+        addMinutes(base, d.endMin).toISOString(),
+      );
+    };
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active]);
+
+  function beginDrag(e: React.PointerEvent, block: GridBlock, dayIndex: number, mode: DragMode) {
+    if (e.button !== 0) return; // ignore right/middle click (context menu)
+    e.preventDefault();
+    e.stopPropagation();
+    setBoth({
+      kind: block.kind,
+      dragId: block.id,
+      event: block.event,
+      reminder: block.reminder,
+      mode,
+      origStartMin: block.startMin,
+      origEndMin: block.endMin,
+      origDayIndex: dayIndex,
+      startMin: block.startMin,
+      endMin: block.endMin,
+      dayIndex,
+      pointerStartY: e.clientY,
+    });
+  }
+
+  // Time (rounded to the snap grid) under a pointer Y within the columns.
+  function minuteFromY(clientY: number): number {
+    const top = colsRef.current?.getBoundingClientRect().top ?? 0;
+    return clamp(
+      Math.round(((clientY - top) / HOUR_HEIGHT) * 60 / SNAP) * SNAP,
+      0,
+      DAY_MINUTES,
+    );
+  }
+
+  // Tint Saturday/Sunday columns (only meaningful in multi-day / week view).
+  const weekendClass = (d: Date) =>
+    days.length > 1 && (d.getDay() === 0 || d.getDay() === 6) ? "bg-muted/40" : "";
+
+  const dragId = drag?.dragId ?? null;
+  const anyAllDay = days.some(
+    (d) => dayAllDayEvents(evs, d).length > 0 || dayAllDayReminders(rems, d).length > 0,
+  );
+
+  return (
+    <div className="flex h-full select-none flex-col">
+      {/* Day headers */}
+      <div className="flex border-b border-border">
+        <div className="w-14 shrink-0" />
+        {days.map((d) => (
+          <div
+            key={d.toISOString()}
+            className={cn(
+              "flex-1 border-l border-border px-2 py-1.5 text-center",
+              weekendClass(d),
+            )}
+          >
+            <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+              {format(d, "EEE")}
+            </div>
+            <div
+              className={cn(
+                "mx-auto flex size-7 items-center justify-center rounded-full text-sm font-semibold",
+                isToday(d) && "bg-primary text-primary-foreground",
+              )}
+            >
+              {format(d, "d")}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* All-day / undated row */}
+      {anyAllDay && (
+        <div className="flex border-b border-border">
+          <div className="flex w-14 shrink-0 items-start justify-end pr-2 pt-1 text-[10px] uppercase text-muted-foreground">
+            all-day
+          </div>
+          {days.map((d) => (
+            <div
+              key={d.toISOString()}
+              className={cn(
+                "min-h-7 flex-1 space-y-0.5 border-l border-border p-1",
+                weekendClass(d),
+              )}
+            >
+              <AnimatePresence initial={false}>
+              {dayAllDayEvents(evs, d).map((e) => (
+                <motion.button
+                  key={(e.id ?? e.title) + "ev"}
+                  layout
+                  initial={POOF_INITIAL}
+                  animate={POOF_ANIMATE}
+                  exit={POOF_EXIT}
+                  transition={POOF_TRANSITION}
+                  onClick={() => onEditEvent(e)}
+                  onContextMenu={(ev) => onEventContextMenu(ev, e)}
+                  className="block w-full truncate rounded border-l-2 px-1 text-left text-[11px]"
+                  style={{ backgroundColor: tint(e.color), borderLeftColor: e.color ?? FALLBACK_COLOR }}
+                  title={e.title}
+                >
+                  {e.title}
+                </motion.button>
+              ))}
+              {dayAllDayReminders(rems, d).map((r) => (
+                <motion.div
+                  key={(r.id ?? r.title) + "rm"}
+                  layout
+                  initial={POOF_INITIAL}
+                  animate={POOF_ANIMATE}
+                  exit={POOF_EXIT}
+                  transition={POOF_TRANSITION}
+                  onClick={() => onEditReminder(r)}
+                  onContextMenu={(ev) => onReminderContextMenu(ev, r)}
+                  className="flex w-full cursor-pointer items-center gap-1 truncate rounded border border-dashed px-1 text-left text-[11px]"
+                  style={{ borderColor: r.color ?? FALLBACK_COLOR }}
+                  title={r.title}
+                >
+                  <ReminderToggle
+                    completed={r.completed}
+                    color={r.color}
+                    onToggle={() => onToggleReminder(r, !r.completed)}
+                  />
+                  <span className={cn("truncate", r.completed && "line-through opacity-60")}>
+                    {r.title}
+                  </span>
+                  {r.recurring && <Repeat className="size-3 shrink-0 opacity-70" />}
+                </motion.div>
+              ))}
+              </AnimatePresence>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Scrollable time grid */}
+      <div ref={scrollRef} className="flex-1 overflow-y-auto">
+        <div className="flex" style={{ height: GRID_HEIGHT }}>
+          {/* Hour gutter */}
+          <div className="relative w-14 shrink-0">
+            {HOURS.filter((h) => h > 0).map((h) => (
+              <div
+                key={h}
+                className="absolute right-2 -translate-y-1/2 text-[10px] text-muted-foreground"
+                style={{ top: h * HOUR_HEIGHT }}
+              >
+                {minutesLabel(h * 60)}
+              </div>
+            ))}
+          </div>
+
+          {/* Day columns */}
+          <div ref={colsRef} className="flex flex-1">
+            {days.map((d, dayIndex) => {
+              const blocks = dayGridBlocks(evs, rems, d);
+              const showNow = isToday(d);
+              const showPreview = drag && drag.dayIndex === dayIndex;
+              return (
+                <div
+                  key={d.toISOString()}
+                  className={cn(
+                    "relative flex-1 border-l border-border",
+                    weekendClass(d),
+                  )}
+                  onContextMenu={(e) =>
+                    onEmptyContextMenu(e, addMinutes(startOfDay(d), minuteFromY(e.clientY)))
+                  }
+                >
+                  {HOURS.map((h) => (
+                    <div
+                      key={h}
+                      className="border-t border-border/40 hover:bg-accent/40"
+                      style={{ height: HOUR_HEIGHT }}
+                    />
+                  ))}
+
+                  {(() => {
+                    const weekend = d.getDay() === 0 || d.getDay() === 6;
+                    const ws = weekend ? workHours.weekendStart : workHours.workdayStart;
+                    const we = weekend ? workHours.weekendEnd : workHours.workdayEnd;
+                    return (
+                      <>
+                        {ws > 0 && (
+                          <div
+                            className="pointer-events-none absolute inset-x-0 top-0 bg-foreground/[0.05]"
+                            style={{ height: ws * HOUR_HEIGHT }}
+                          />
+                        )}
+                        {we < 24 && (
+                          <div
+                            className="pointer-events-none absolute inset-x-0 bg-foreground/[0.05]"
+                            style={{ top: we * HOUR_HEIGHT, height: (24 - we) * HOUR_HEIGHT }}
+                          />
+                        )}
+                      </>
+                    );
+                  })()}
+
+                  {showNow && (
+                    <div
+                      className="pointer-events-none absolute inset-x-0 z-10 border-t-2 border-red-500"
+                      style={{ top: nowOffsetPx() }}
+                    >
+                      <div className="absolute -left-1 -top-1 size-2 rounded-full bg-red-500" />
+                    </div>
+                  )}
+
+                  <AnimatePresence initial={false}>
+                    {blocks.map((b) =>
+                      b.kind === "event" ? (
+                        <EventBlock
+                          key={b.id}
+                          block={b}
+                          dimmed={active && b.id === dragId}
+                          onBeginDrag={(e, mode) => beginDrag(e, b, dayIndex, mode)}
+                          onEdit={() => b.event && onEditEvent(b.event)}
+                          onContextMenu={(e) => {
+                            e.stopPropagation();
+                            if (b.event) onEventContextMenu(e, b.event);
+                          }}
+                        />
+                      ) : (
+                        <ReminderBlock
+                          key={b.id}
+                          block={b}
+                          dimmed={active && b.id === dragId}
+                          onBeginDrag={(e) => beginDrag(e, b, dayIndex, "move")}
+                          onContextMenu={(e) => {
+                            e.stopPropagation();
+                            if (b.reminder) onReminderContextMenu(e, b.reminder);
+                          }}
+                          onToggleComplete={() =>
+                            b.reminder && onToggleReminder(b.reminder, !b.reminder.completed)
+                          }
+                        />
+                      ),
+                    )}
+                  </AnimatePresence>
+
+                  {showPreview && (
+                    <PreviewBlock
+                      kind={drag.kind}
+                      title={drag.kind === "event" ? drag.event!.title : drag.reminder!.title}
+                      color={drag.kind === "event" ? drag.event!.color : drag.reminder!.color}
+                      completed={drag.reminder?.completed}
+                      startMin={drag.startMin}
+                      endMin={drag.endMin}
+                    />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ReminderIcon({ completed, color }: { completed?: boolean; color: string | null }) {
+  const Icon = completed ? CircleCheck : Circle;
+  return (
+    <Icon className="size-3 shrink-0" style={{ color: color ?? FALLBACK_COLOR }} strokeWidth={2.5} />
+  );
+}
+
+function ReminderToggle({
+  completed,
+  color,
+  onToggle,
+}: {
+  completed?: boolean;
+  color: string | null;
+  onToggle: () => void;
+}) {
+  const Icon = completed ? CircleCheck : Circle;
+  return (
+    <button
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation();
+        onToggle();
+      }}
+      className="flex shrink-0 items-center"
+      aria-label={completed ? "Mark incomplete" : "Mark complete"}
+      title={completed ? "Mark incomplete" : "Mark complete"}
+    >
+      <Icon className="size-3.5" style={{ color: color ?? FALLBACK_COLOR }} strokeWidth={2.5} />
+    </button>
+  );
+}
+
+function EventBlock({
+  block,
+  dimmed,
+  onBeginDrag,
+  onEdit,
+  onContextMenu,
+}: {
+  block: GridBlock;
+  dimmed: boolean;
+  onBeginDrag: (e: React.PointerEvent, mode: DragMode) => void;
+  onEdit: () => void;
+  onContextMenu: (e: React.MouseEvent) => void;
+}) {
+  const { title, color, startMin, endMin, col, cols } = block;
+  const accent = color ?? FALLBACK_COLOR;
+  const { top, height } = blockGeometry(startMin, endMin);
+  const draggable = !block.continuesBefore && !block.continuesAfter;
+
+  return (
+    <motion.div
+      initial={POOF_INITIAL}
+      animate={dimmed ? { opacity: 0 } : POOF_ANIMATE}
+      exit={POOF_EXIT}
+      transition={POOF_TRANSITION}
+      onPointerDown={(e) => draggable && onBeginDrag(e, "move")}
+      onClick={() => !draggable && onEdit()}
+      onContextMenu={onContextMenu}
+      className={cn(
+        "absolute overflow-hidden rounded-md border-l-2 px-1.5 py-0.5 text-[11px] leading-tight shadow-sm",
+        dimmed && "pointer-events-none",
+        draggable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
+      )}
+      style={{ top, height, ...colStyle(col, cols), backgroundColor: tint(color), borderLeftColor: accent }}
+      title={title}
+    >
+      {draggable && (
+        <div
+          onPointerDown={(e) => onBeginDrag(e, "resize-start")}
+          className="absolute inset-x-0 top-0 h-1.5 cursor-ns-resize"
+        />
+      )}
+      <div className="pointer-events-none truncate font-medium">{title}</div>
+      {height > 28 && (
+        <div className="pointer-events-none truncate opacity-70">
+          {minutesLabel(startMin)} – {minutesLabel(endMin)}
+        </div>
+      )}
+      {draggable && (
+        <div
+          onPointerDown={(e) => onBeginDrag(e, "resize-end")}
+          className="absolute inset-x-0 bottom-0 h-1.5 cursor-ns-resize"
+        />
+      )}
+    </motion.div>
+  );
+}
+
+function ReminderBlock({
+  block,
+  dimmed,
+  onBeginDrag,
+  onContextMenu,
+  onToggleComplete,
+}: {
+  block: GridBlock;
+  dimmed: boolean;
+  onBeginDrag: (e: React.PointerEvent) => void;
+  onContextMenu: (e: React.MouseEvent) => void;
+  onToggleComplete: () => void;
+}) {
+  const { title, color, startMin, endMin, col, cols, completed } = block;
+  const accent = color ?? FALLBACK_COLOR;
+  const { top, height } = blockGeometry(startMin, endMin);
+
+  return (
+    <motion.div
+      initial={POOF_INITIAL}
+      animate={dimmed ? { opacity: 0 } : POOF_ANIMATE}
+      exit={POOF_EXIT}
+      transition={POOF_TRANSITION}
+      onPointerDown={onBeginDrag}
+      onContextMenu={onContextMenu}
+      className={cn(
+        "absolute flex cursor-grab items-center gap-1 overflow-hidden rounded-md border border-dashed bg-background/80 px-1.5 shadow-sm active:cursor-grabbing",
+        dimmed && "pointer-events-none",
+      )}
+      style={{ top, height, ...colStyle(col, cols), borderColor: accent }}
+      title={`Reminder: ${title}`}
+    >
+      <ReminderToggle completed={completed} color={color} onToggle={onToggleComplete} />
+      <span className={cn("pointer-events-none truncate text-[11px] font-medium leading-tight", completed && "line-through opacity-60")}>
+        {title}
+      </span>
+      {block.reminder?.recurring && (
+        <Repeat className="pointer-events-none size-3 shrink-0 opacity-70" />
+      )}
+    </motion.div>
+  );
+}
+
+function PreviewBlock({
+  kind,
+  title,
+  color,
+  completed,
+  startMin,
+  endMin,
+}: {
+  kind: GridBlockKind;
+  title: string;
+  color: string | null;
+  completed?: boolean;
+  startMin: number;
+  endMin: number;
+}) {
+  const accent = color ?? FALLBACK_COLOR;
+  const { top, height } = blockGeometry(startMin, endMin);
+
+  if (kind === "reminder") {
+    return (
+      <div
+        className="pointer-events-none absolute inset-x-0 z-20 flex items-center gap-1 overflow-hidden rounded-md border border-dashed bg-background px-1.5 shadow-lg ring-2 ring-primary/60"
+        style={{ top, height, borderColor: accent }}
+      >
+        <ReminderIcon completed={completed} color={color} />
+        <span className="truncate text-[11px] font-medium">{title}</span>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="pointer-events-none absolute inset-x-0 z-20 overflow-hidden rounded-md border-l-2 px-1.5 py-0.5 text-[11px] leading-tight shadow-lg ring-2 ring-primary/60"
+      style={{ top, height, backgroundColor: tint(color), borderLeftColor: accent }}
+    >
+      <div className="truncate font-medium">{title}</div>
+      <div className="truncate opacity-70">
+        {minutesLabel(startMin)} – {minutesLabel(endMin)}
+      </div>
+    </div>
+  );
+}

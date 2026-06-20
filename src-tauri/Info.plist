@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- macOS 14+ full-access keys -->
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>FocalPlanner displays and manages your calendar events.</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>FocalPlanner displays and manages your reminders.</string>
+	<!-- Legacy keys for macOS 13 and earlier -->
+	<key>NSCalendarsUsageDescription</key>
+	<string>FocalPlanner displays and manages your calendar events.</string>
+	<key>NSRemindersUsageDescription</key>
+	<string>FocalPlanner displays and manages your reminders.</string>
+</dict>
+</plist>
