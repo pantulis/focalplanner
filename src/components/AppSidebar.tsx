@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import {
   CalendarDays,
   CalendarRange,
+  CircleCheck,
   Cloud,
   CloudOff,
   GripVertical,
@@ -14,8 +15,10 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { Area } from "@/lib/areas";
+import { isAreaDue, reviewSinceLabel } from "@/lib/review";
 import { cn } from "@/lib/utils";
 import { SidebarCalendar } from "@/components/SidebarCalendar";
+import { ReviewPanel } from "@/components/ReviewPanel";
 
 export type Section = "today" | "weekly" | "planner";
 
@@ -42,6 +45,12 @@ interface Props {
   onSelectDay: (day: Date) => void;
   /** New area order (area ids) after a drag-to-reorder. */
   onReorderAreas: (ids: string[]) => void;
+  /** Review panel (Planner view) state. */
+  reviewedAt: Record<string, string>;
+  reviewIntervalDays: number;
+  onMarkReviewed: (id: string) => void;
+  inboxCount: number;
+  overdueCount: number;
 }
 
 /** Drag-to-reorder list of areas (pointer-based; HTML5 DnD is flaky in WKWebView). */
@@ -50,11 +59,20 @@ function SortableAreas({
   activeArea,
   onSelectArea,
   onReorder,
+  showReview = false,
+  reviewedAt = {},
+  intervalDays = 7,
+  onMarkReviewed,
 }: {
   areas: Area[];
   activeArea: string;
   onSelectArea: (id: string) => void;
   onReorder: (ids: string[]) => void;
+  /** Planner view: show per-area review status + a "mark reviewed" checkmark. */
+  showReview?: boolean;
+  reviewedAt?: Record<string, string>;
+  intervalDays?: number;
+  onMarkReviewed?: (id: string) => void;
 }) {
   const listRef = useRef<HTMLDivElement>(null);
   const [drag, setDrag] = useState<{ id: string; overIndex: number } | null>(null);
@@ -107,27 +125,60 @@ function SortableAreas({
 
   return (
     <div ref={listRef} className="space-y-0.5">
-      {areas.map((a, index) => (
-        <div key={a.id} data-area-id={a.id} className="relative">
-          {drag && drag.overIndex === index && (
-            <div className="absolute -top-px inset-x-1 z-10 h-0.5 rounded bg-primary" />
-          )}
-          <button
-            onPointerDown={(e) => startDrag(e, a)}
-            className={cn(
-              "group flex w-full select-none items-center gap-2 rounded-md px-2.5 py-1.5 text-sm transition-colors",
-              activeArea === a.id
-                ? "bg-accent font-medium text-foreground"
-                : "text-foreground/70 hover:bg-accent/60",
-              drag?.id === a.id && "opacity-40",
+      {areas.map((a, index) => {
+        const dueNow = showReview && isAreaDue(reviewedAt, a.id, intervalDays);
+        return (
+          <div key={a.id} data-area-id={a.id} className="relative">
+            {drag && drag.overIndex === index && (
+              <div className="absolute -top-px inset-x-1 z-10 h-0.5 rounded bg-primary" />
             )}
-          >
-            <a.icon className="size-3.5 shrink-0" style={{ color: a.color }} />
-            <span className="truncate">{a.label}</span>
-            <GripVertical className="ml-auto size-3.5 shrink-0 cursor-grab text-muted-foreground opacity-0 transition-opacity group-hover:opacity-60" />
-          </button>
-        </div>
-      ))}
+            <div
+              onPointerDown={(e) => startDrag(e, a)}
+              className={cn(
+                "group flex w-full cursor-default select-none items-center gap-2 rounded-md px-2.5 py-1.5 text-sm transition-colors",
+                activeArea === a.id
+                  ? "bg-accent font-medium text-foreground"
+                  : "text-foreground/70 hover:bg-accent/60",
+                drag?.id === a.id && "opacity-40",
+              )}
+            >
+              <a.icon className="size-3.5 shrink-0" style={{ color: a.color }} />
+              <span className="truncate">{a.label}</span>
+              {showReview ? (
+                <>
+                  <span
+                    className={cn(
+                      "ml-auto shrink-0 text-[10px]",
+                      dueNow ? "font-medium text-primary" : "text-muted-foreground/70",
+                    )}
+                  >
+                    {dueNow ? "review" : reviewSinceLabel(reviewedAt, a.id)}
+                  </span>
+                  <button
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onMarkReviewed?.(a.id);
+                    }}
+                    title="Mark reviewed"
+                    aria-label={`Mark ${a.label} reviewed`}
+                    className={cn(
+                      "shrink-0 rounded p-0.5 transition-colors",
+                      dueNow
+                        ? "text-primary hover:bg-primary/10"
+                        : "text-muted-foreground/40 hover:text-foreground",
+                    )}
+                  >
+                    <CircleCheck className="size-3.5" />
+                  </button>
+                </>
+              ) : (
+                <GripVertical className="ml-auto size-3.5 shrink-0 cursor-grab text-muted-foreground opacity-0 transition-opacity group-hover:opacity-60" />
+              )}
+            </div>
+          </div>
+        );
+      })}
       {drag && drag.overIndex === areas.length && (
         <div className="mx-1 h-0.5 rounded bg-primary" />
       )}
@@ -157,7 +208,7 @@ function SyncIndicator({ sync, onClick }: { sync: SyncStatus; onClick: () => voi
 const NAV: { id: Section; label: string; icon: LucideIcon; soon?: boolean }[] = [
   { id: "today", label: "Daily", icon: CalendarDays },
   { id: "weekly", label: "Weekly", icon: CalendarRange },
-  { id: "planner", label: "Planner", icon: LayoutDashboard, soon: true },
+  { id: "planner", label: "Planner", icon: LayoutDashboard },
 ];
 
 function NavButton({
@@ -236,6 +287,11 @@ export function AppSidebar({
   weekView,
   onSelectDay,
   onReorderAreas,
+  reviewedAt,
+  reviewIntervalDays,
+  onMarkReviewed,
+  inboxCount,
+  overdueCount,
 }: Props) {
   return (
     <aside className="flex h-full w-56 shrink-0 flex-col border-r border-border bg-sidebar px-2.5 pb-4 text-sidebar-foreground">
@@ -292,6 +348,10 @@ export function AppSidebar({
           activeArea={activeArea}
           onSelectArea={onSelectArea}
           onReorder={onReorderAreas}
+          showReview={section === "planner"}
+          reviewedAt={reviewedAt}
+          intervalDays={reviewIntervalDays}
+          onMarkReviewed={onMarkReviewed}
         />
         {areas.length === 0 && (
           <button
@@ -309,14 +369,27 @@ export function AppSidebar({
         />
       </div>
 
-      {/* Fixed mini-calendar between Areas of Focus and Settings. */}
+      {/* Fixed panel between Areas of Focus and Settings: the Review panel in
+          the Planner view, otherwise a mini-calendar. */}
       <div className="mt-2 shrink-0 border-t border-border pt-2">
-        <SidebarCalendar
-          anchor={anchor}
-          weekStartsOn={weekStartsOn}
-          weekView={weekView}
-          onSelectDay={onSelectDay}
-        />
+        {section === "planner" ? (
+          <ReviewPanel
+            areas={areas}
+            onSelectArea={onSelectArea}
+            reviewedAt={reviewedAt}
+            intervalDays={reviewIntervalDays}
+            onMarkReviewed={onMarkReviewed}
+            inboxCount={inboxCount}
+            overdueCount={overdueCount}
+          />
+        ) : (
+          <SidebarCalendar
+            anchor={anchor}
+            weekStartsOn={weekStartsOn}
+            weekView={weekView}
+            onSelectDay={onSelectDay}
+          />
+        )}
       </div>
 
       <div className="flex shrink-0 items-center gap-1 pt-2">

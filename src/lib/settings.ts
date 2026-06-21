@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { load, type Store } from "@tauri-apps/plugin-store";
 
+export type PlannerLayout = "swimlanes" | "pipeline" | "horizon";
+
 export interface Settings {
   showCompletedReminders: boolean;
   /** 0 = Sunday, 1 = Monday */
@@ -19,8 +21,16 @@ export interface Settings {
   inspectorContextHours: number;
   /** Show the current event/reminder and today's agenda in the macOS menu bar. */
   menubarEnabled: boolean;
+  /** Layout of the Time Sector planner. */
+  plannerLayout: PlannerLayout;
+  /** Animated bird/fish silhouettes drifting across the planner lanes. */
+  plannerAnimations: boolean;
   /** Custom order of areas of focus in the sidebar (area ids). */
   areaOrder: string[];
+  /** Last time each area of focus was reviewed (area id → ISO timestamp). */
+  areaReviewedAt: Record<string, string>;
+  /** How often (days) an area of focus becomes due for review. */
+  reviewIntervalDays: number;
   /** GitHub sync bookkeeping (not secret; the token lives in the Keychain). */
   syncGistId?: string;
   syncUpdatedAt?: string;
@@ -41,7 +51,11 @@ export const DEFAULT_SETTINGS: Settings = {
   scale: 1,
   inspectorContextHours: 2,
   menubarEnabled: true,
+  plannerLayout: "swimlanes",
+  plannerAnimations: true,
   areaOrder: [],
+  areaReviewedAt: {},
+  reviewIntervalDays: 7,
   autoSync: true,
 };
 

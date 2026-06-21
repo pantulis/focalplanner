@@ -12,7 +12,6 @@ import {
   CalendarX2,
   CircleCheck,
   Clock,
-  LayoutDashboard,
   ListTodo,
   Moon,
   Pencil,
@@ -64,6 +63,8 @@ import { PermissionGate } from "@/components/PermissionGate";
 import { AppSidebar, type Section } from "@/components/AppSidebar";
 import { PlannerToolbar } from "@/components/PlannerToolbar";
 import { TimeGridView } from "@/components/TimeGridView";
+import { FocusBoard } from "@/components/FocusBoard";
+import { dueForSector, sectorLabel, type Sector } from "@/lib/sectors";
 import { ReminderList, type StatusFilter } from "@/components/ReminderList";
 import { EventInspector } from "@/components/EventInspector";
 import { ReminderInspector } from "@/components/ReminderInspector";
@@ -329,7 +330,8 @@ function Planner() {
   // elementFromPoint + the `data-grid-day` attribute the grid renders.
   type RemDropTarget =
     | { kind: "grid"; day: number; minute: number }
-    | { kind: "allday"; day: number };
+    | { kind: "allday"; day: number }
+    | { kind: "sector"; sector: Sector };
   const [remDrag, setRemDrag] = useState<{
     reminder: ReminderDto;
     x: number;
@@ -360,6 +362,10 @@ function Planner() {
       const dayIndex = Number(allday.dataset.alldayDay);
       if (!Number.isNaN(dayIndex) && days[dayIndex]) return { kind: "allday", day: dayIndex };
     }
+    const sector = el?.closest<HTMLElement>("[data-sector]");
+    if (sector?.dataset.sector) {
+      return { kind: "sector", sector: sector.dataset.sector as Sector };
+    }
     return null;
   }
 
@@ -388,6 +394,10 @@ function Planner() {
           );
         } else if (t?.kind === "allday") {
           updateReminderDue(reminder, format(days[t.day], "yyyy-MM-dd"));
+        } else if (t?.kind === "sector") {
+          const due = dueForSector(t.sector, reminder.due, new Date(), weekStartsOn);
+          if (due === null) clearReminderDue(reminder);
+          else updateReminderDue(reminder, due);
         }
       }
       setRemDrag(null);
@@ -454,6 +464,22 @@ function Planner() {
       return ia - ib;
     });
   }, [areaConfig, visibleCalendars, visibleLists, settings.areaOrder]);
+
+  // ── Review panel (Planner view) ──────────────────────────────────────────
+  const inboxCount = useMemo(
+    () => (filteredReminders ?? []).filter((r) => !r.completed && !r.due).length,
+    [filteredReminders],
+  );
+  const overdueCount = useMemo(() => {
+    const today = startOfDay(new Date()).getTime();
+    return (filteredReminders ?? []).filter(
+      (r) => !r.completed && r.due && startOfDay(parseISO(r.due)).getTime() < today,
+    ).length;
+  }, [filteredReminders]);
+  const markAreaReviewed = (id: string) =>
+    updateSettings({
+      areaReviewedAt: { ...(settings.areaReviewedAt ?? {}), [id]: new Date().toISOString() },
+    });
 
   useEffect(() => {
     if (activeArea !== "all" && !availableAreas.some((a) => a.id === activeArea)) {
@@ -1021,6 +1047,11 @@ function Planner() {
         weekView={section === "weekly"}
         onSelectDay={(day) => setAnchor(day)}
         onReorderAreas={(ids) => updateSettings({ areaOrder: ids })}
+        reviewedAt={settings.areaReviewedAt ?? {}}
+        reviewIntervalDays={settings.reviewIntervalDays ?? 7}
+        onMarkReviewed={markAreaReviewed}
+        inboxCount={inboxCount}
+        overdueCount={overdueCount}
       />
 
       <main className="flex min-w-0 flex-1 flex-col">
@@ -1038,12 +1069,29 @@ function Planner() {
         <div className="flex min-h-0 flex-1">
           <div className="min-w-0 flex-1">
             {isPlanner ? (
-              <div className="flex h-full items-center justify-center text-muted-foreground">
-                <div className="text-center">
-                  <LayoutDashboard className="mx-auto mb-2 size-8 opacity-40" />
-                  <p className="text-sm">Planner view — coming soon</p>
-                </div>
-              </div>
+              <FocusBoard
+                reminders={filteredReminders}
+                loading={reminders.isLoading}
+                weekStartsOn={weekStartsOn}
+                layout={settings.plannerLayout}
+                onLayoutChange={(l) => updateSettings({ plannerLayout: l })}
+                externalSector={
+                  remDrag?.target?.kind === "sector" ? remDrag.target.sector : null
+                }
+                animations={settings.plannerAnimations}
+                onEdit={(r) => openReminderEditor(r)}
+                onComplete={(r, completed) =>
+                  r.id &&
+                  reminderMx.toggle.mutate({ id: r.id, completed }, { onError: fail })
+                }
+                onReschedule={(r, due) =>
+                  due === null ? clearReminderDue(r) : updateReminderDue(r, due)
+                }
+                onQuickAdd={(due) =>
+                  openReminderEditor(null, due, eligibleLists[0]?.id ?? null)
+                }
+                onContextMenu={openReminderMenu}
+              />
             ) : (
               <TimeGridView
                 days={days}
@@ -1080,7 +1128,7 @@ function Planner() {
             )}
           </div>
 
-          {!isPlanner && showReminders && !inspectorOpen && (
+          {showReminders && !inspectorOpen && (
             <ReminderList
               reminders={filteredReminders}
               groups={availableGroups}
@@ -1197,7 +1245,9 @@ function Planner() {
             <span className="shrink-0 font-medium text-primary">
               {remDrag.target.kind === "grid"
                 ? `${format(days[remDrag.target.day], "EEE")} ${fmtMinute(remDrag.target.minute)}`
-                : `${format(days[remDrag.target.day], "EEE")} · all day`}
+                : remDrag.target.kind === "allday"
+                  ? `${format(days[remDrag.target.day], "EEE")} · all day`
+                  : sectorLabel(remDrag.target.sector)}
             </span>
           )}
         </div>

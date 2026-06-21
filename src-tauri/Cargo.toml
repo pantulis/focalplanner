@@ -1,6 +1,6 @@
 [package]
 name = "focalplanner"
-version = "0.7.0"
+version = "0.8.0"
 description = "A native macOS planner that unifies Apple Calendar events and Reminders, organized by Areas of Focus."
 authors = ["Juan Lupión <pantulis@gmail.com>"]
 edition = "2021"

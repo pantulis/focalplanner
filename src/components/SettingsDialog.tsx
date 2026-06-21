@@ -201,6 +201,29 @@ export function SettingsDialog({
               </div>
 
               <div className="space-y-1.5">
+                <Label>Review areas of focus every</Label>
+                <Select
+                  value={settings.reviewIntervalDays}
+                  onChange={(e) =>
+                    onChange({ reviewIntervalDays: Number(e.target.value) })
+                  }
+                  className="h-8 w-40 text-xs"
+                >
+                  {[
+                    { v: 1, l: "Day" },
+                    { v: 3, l: "3 days" },
+                    { v: 7, l: "Week" },
+                    { v: 14, l: "2 weeks" },
+                    { v: 30, l: "Month" },
+                  ].map((o) => (
+                    <option key={o.v} value={o.v}>
+                      {o.l}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
                 <Label>Workday hours</Label>
                 <div className="flex items-center gap-2">
                   <HourSelect
@@ -332,6 +355,14 @@ export function SettingsDialog({
                   ))}
                 </div>
               </div>
+
+              <label className="flex items-center gap-2 border-t border-border pt-4 text-sm">
+                <Checkbox
+                  checked={settings.plannerAnimations}
+                  onCheckedChange={(c) => onChange({ plannerAnimations: c })}
+                />
+                Animate the planner lanes (drifting birds &amp; fish)
+              </label>
             </div>
           )}
 

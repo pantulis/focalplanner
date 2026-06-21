@@ -6,6 +6,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 project adheres to [Semantic Versioning](https://semver.org/). Update this file in
 the same commit that bumps the version for each release.
 
+## [0.8.0] — 2026-06-21
+
+### Added
+- **Planner view (Time Sector System).** A new planner organized by *when* you'll
+  act, following Carl Pullein's Time Sector method: Inbox, This Week, Next Week,
+  This Month, Next Month and Long Term. Dropping a reminder into a sector assigns a
+  sensible due date for that horizon; the Inbox clears the date. Three switchable
+  layouts for the same data — **Lanes** (stacked swimlanes), **Pipeline** (focus +
+  flow) and **Horizon** (vertical) — chosen from the board header.
+- **Reminders sidebar in the planner.** Drag reminders straight from the sidebar
+  onto a sector to schedule them.
+- **Animated lane scenery (optional).** The Lanes layout drifts sparse bird and
+  fish silhouettes — birds over the far-horizon lanes (sky), fish over the near
+  lanes (depths) — with slow clouds and rising bubbles. Fish turn to face their
+  direction of travel. Toggle under **Settings → Appearance**.
+- **Areas of Focus review.** An OmniFocus-style review for the planner: each area
+  shows its review status (`review` / `today` / `Nd ago`) and a checkmark to mark
+  it reviewed, with a **Start review** walkthrough that steps through every due
+  area one at a time. The review interval is configurable under **Settings →
+  General** (day, 3 days, week, 2 weeks, month). The sidebar mini-calendar is
+  replaced by this review panel while in the planner.
+
+### Changed
+- Areas of Focus can be reordered by drag in the sidebar.
+
 ## [0.7.0] — 2026-06-21
 
 ### Added
