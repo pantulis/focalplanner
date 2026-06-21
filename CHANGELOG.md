@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 project adheres to [Semantic Versioning](https://semver.org/). Update this file in
 the same commit that bumps the version for each release.
 
+## [1.0.0] — 2026-06-21
+
+First stable release.
+
+### Added
+- **Demo Mode (dev builds only).** A non-destructive sandbox that swaps in a
+  built-in set of sample calendars, events and reminders — generated fresh and
+  dated around the moment it's switched on — so screenshots can be captured
+  without exposing personal data. EventKit is never read or written while it's
+  on; the sample data lives only on the device and is discarded on exit. Toggle
+  from the About dialog (shown only on debug/non-release builds), with a
+  persistent "DEMO" badge while active.
+- **Update notifications.** On launch the app checks GitHub for a newer release
+  and shows a dismissible banner with a download link (no auto-install).
+- **Screenshots tooling.** `screenshots/normalize.sh` frames raw window captures
+  uniformly (centered window, equal border, identical dimensions) and emits
+  README-sized PNG and WebP versions; a Screenshots gallery in the README.
+
+### Changed
+- The event/reminder inspector now slides in as a **Sheet** over the main view
+  (backdrop + click-outside/Escape to close) instead of replacing the reminders
+  sidebar.
+- Renamed the **Health** area of focus to **Health & Fitness**.
+
 ## [0.8.0] — 2026-06-21
 
 ### Added
