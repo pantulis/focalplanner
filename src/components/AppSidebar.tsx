@@ -155,7 +155,7 @@ function SyncIndicator({ sync, onClick }: { sync: SyncStatus; onClick: () => voi
 }
 
 const NAV: { id: Section; label: string; icon: LucideIcon; soon?: boolean }[] = [
-  { id: "today", label: "Today", icon: CalendarDays },
+  { id: "today", label: "Daily", icon: CalendarDays },
   { id: "weekly", label: "Weekly", icon: CalendarRange },
   { id: "planner", label: "Planner", icon: LayoutDashboard, soon: true },
 ];

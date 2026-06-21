@@ -2,7 +2,9 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Check, Cloud, Loader2, Lock, Sparkles } from "lucide-react";
 import type { CalendarDto } from "@/lib/api";
+import type { AreaConfig } from "@/lib/areas";
 import type { SyncController } from "@/lib/sync";
+import { AreasPane } from "@/components/AreasPane";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -22,7 +24,7 @@ import { Select } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
-export type Pane = "general" | "calendars" | "appearance" | "sync";
+export type Pane = "general" | "areas" | "calendars" | "appearance" | "sync";
 
 interface Props {
   open: boolean;
@@ -31,6 +33,11 @@ interface Props {
   onChange: (patch: Partial<Settings>) => void;
   calendars: CalendarDto[];
   lists: CalendarDto[];
+  /** Visible (non-ignored) calendars/lists for the Areas of Focus editor. */
+  areaCalendars: CalendarDto[];
+  areaLists: CalendarDto[];
+  areaConfig: AreaConfig;
+  onAreaConfigChange: (next: AreaConfig) => void;
   sync: SyncController;
   onConnectClick: () => void;
   /** Pane to show when the dialog is (re)opened. */
@@ -41,6 +48,7 @@ interface Props {
 
 const PANES: { id: Pane; label: string }[] = [
   { id: "general", label: "General" },
+  { id: "areas", label: "Areas of Focus" },
   { id: "calendars", label: "Calendars" },
   { id: "appearance", label: "Appearance" },
   { id: "sync", label: "Sync" },
@@ -79,6 +87,10 @@ export function SettingsDialog({
   onChange,
   calendars,
   lists,
+  areaCalendars,
+  areaLists,
+  areaConfig,
+  onAreaConfigChange,
   sync,
   onConnectClick,
   initialPane,
@@ -219,6 +231,15 @@ export function SettingsDialog({
                 </div>
               </div>
             </div>
+          )}
+
+          {pane === "areas" && (
+            <AreasPane
+              calendars={areaCalendars}
+              lists={areaLists}
+              config={areaConfig}
+              onChange={onAreaConfigChange}
+            />
           )}
 
           {pane === "calendars" && (

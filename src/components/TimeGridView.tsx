@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
-import { addMinutes, format, startOfDay } from "date-fns";
-import { Circle, CircleCheck, Repeat } from "lucide-react";
+import { addMinutes, format, parseISO, startOfDay } from "date-fns";
+import { Circle, CircleCheck, MapPin, Repeat } from "lucide-react";
 import type { EventDto, ReminderDto } from "@/lib/api";
 import {
   DAY_MINUTES,
@@ -32,6 +33,12 @@ interface Props {
   onReminderContextMenu: (e: React.MouseEvent, reminder: ReminderDto) => void;
   /** Target day + snapped minute while a reminder is dragged in from the sidebar. */
   dropPreview?: { day: number; minute: number } | null;
+  /** Begin a pointer-drag of an untimed reminder from the bottom tray. */
+  onReminderDragStart: (e: React.PointerEvent, reminder: ReminderDto) => void;
+  /** Right-click an empty All-day tasks column → create a date-only reminder there. */
+  onEmptyAllDayContextMenu: (e: React.MouseEvent, day: Date) => void;
+  /** All-day column to highlight while a reminder is dragged in from the sidebar/tray. */
+  allDayHighlightDay?: number | null;
   workHours: {
     workdayStart: number;
     workdayEnd: number;
@@ -100,6 +107,9 @@ export function TimeGridView({
   onEventContextMenu,
   onReminderContextMenu,
   dropPreview,
+  onReminderDragStart,
+  onEmptyAllDayContextMenu,
+  allDayHighlightDay,
   workHours,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -173,11 +183,14 @@ export function TimeGridView({
       }
 
       setBoth({ ...d, startMin, endMin, dayIndex });
+      setAllDayTarget(d.kind === "reminder" ? allDayColAt(e.clientX, e.clientY) : null);
     };
 
-    const onUp = () => {
+    const onUp = (e: PointerEvent) => {
       const d = dragRef.current;
       setBoth(null);
+      const overAllDay = d?.kind === "reminder" ? allDayColAt(e.clientX, e.clientY) : null;
+      setAllDayTarget(null);
       if (!d) return;
       const moved =
         d.startMin !== d.origStartMin ||
@@ -186,6 +199,11 @@ export function TimeGridView({
       const base = startOfDay(days[d.dayIndex]);
 
       if (d.kind === "reminder") {
+        // Dropped onto the all-day tray → clear the time, keep (or move to) the day.
+        if (overAllDay != null && d.reminder) {
+          onUpdateReminderDue(d.reminder, format(days[overAllDay], "yyyy-MM-dd"));
+          return;
+        }
         if (!moved) {
           if (d.reminder) onEditReminder(d.reminder);
           return;
@@ -252,9 +270,26 @@ export function TimeGridView({
     days.length > 1 && (d.getDay() === 0 || d.getDay() === 6) ? "bg-muted/40" : "";
 
   const dragId = drag?.dragId ?? null;
-  const anyAllDay = days.some(
-    (d) => dayAllDayEvents(evs, d).length > 0 || dayAllDayReminders(rems, d).length > 0,
-  );
+  const anyAllDay = days.some((d) => dayAllDayEvents(evs, d).length > 0);
+  // Date-only reminders (no time) shown in the bottom tray, draggable onto the grid.
+  const anyUntimed = days.some((d) => dayAllDayReminders(rems, d).length > 0);
+
+  // Lightweight hover card describing the event/reminder under the pointer.
+  const [hover, setHover] = useState<{ x: number; y: number; info: HoverInfo } | null>(null);
+  const showHover = (e: React.MouseEvent, info: HoverInfo) => {
+    if (active) return; // don't fight an in-progress drag
+    setHover({ x: e.clientX, y: e.clientY, info });
+  };
+  const hideHover = () => setHover(null);
+
+  // All-day column under a pointer (for dropping a timed reminder to clear its time).
+  const [allDayTarget, setAllDayTarget] = useState<number | null>(null);
+  function allDayColAt(x: number, y: number): number | null {
+    const el = document.elementFromPoint(x, y)?.closest<HTMLElement>("[data-allday-day]");
+    if (!el) return null;
+    const di = Number(el.dataset.alldayDay);
+    return Number.isNaN(di) ? null : di;
+  }
 
   return (
     <div className="flex h-full select-none flex-col">
@@ -309,37 +344,14 @@ export function TimeGridView({
                   transition={POOF_TRANSITION}
                   onClick={() => onEditEvent(e)}
                   onContextMenu={(ev) => onEventContextMenu(ev, e)}
+                  onMouseEnter={(ev) => showHover(ev, { kind: "event", event: e })}
+                  onMouseMove={(ev) => showHover(ev, { kind: "event", event: e })}
+                  onMouseLeave={hideHover}
                   className="block w-full truncate rounded border-l-2 px-1 text-left text-[11px]"
                   style={{ backgroundColor: tint(e.color), borderLeftColor: e.color ?? FALLBACK_COLOR }}
-                  title={e.title}
                 >
                   {e.title}
                 </motion.button>
-              ))}
-              {dayAllDayReminders(rems, d).map((r) => (
-                <motion.div
-                  key={(r.id ?? r.title) + "rm"}
-                  layout
-                  initial={POOF_INITIAL}
-                  animate={POOF_ANIMATE}
-                  exit={POOF_EXIT}
-                  transition={POOF_TRANSITION}
-                  onClick={() => onEditReminder(r)}
-                  onContextMenu={(ev) => onReminderContextMenu(ev, r)}
-                  className="flex w-full cursor-pointer items-center gap-1 truncate rounded border border-dashed px-1 text-left text-[11px]"
-                  style={{ borderColor: r.color ?? FALLBACK_COLOR }}
-                  title={r.title}
-                >
-                  <ReminderToggle
-                    completed={r.completed}
-                    color={r.color}
-                    onToggle={() => onToggleReminder(r, !r.completed)}
-                  />
-                  <span className={cn("min-w-0 truncate", r.completed && "line-through opacity-60")}>
-                    {r.title}
-                  </span>
-                  {r.recurring && <Repeat className="size-3 shrink-0 opacity-70" />}
-                </motion.div>
               ))}
               </AnimatePresence>
             </div>
@@ -445,6 +457,8 @@ export function TimeGridView({
                             e.stopPropagation();
                             if (b.event) onEventContextMenu(e, b.event);
                           }}
+                          onHover={(e) => b.event && showHover(e, { kind: "event", event: b.event })}
+                          onHoverEnd={hideHover}
                         />
                       ) : (
                         <ReminderBlock
@@ -459,6 +473,10 @@ export function TimeGridView({
                           onToggleComplete={() =>
                             b.reminder && onToggleReminder(b.reminder, !b.reminder.completed)
                           }
+                          onHover={(e) =>
+                            b.reminder && showHover(e, { kind: "reminder", reminder: b.reminder })
+                          }
+                          onHoverEnd={hideHover}
                         />
                       ),
                     )}
@@ -480,7 +498,153 @@ export function TimeGridView({
           </div>
         </div>
       </div>
+
+      {/* Bottom tray: date-only reminders. Drag one onto the grid to give it a
+          time, or drag a scheduled reminder down here to clear its time. */}
+      <div
+        className="relative flex h-[25vh] shrink-0 border-t border-border"
+        style={{ paddingRight: scrollbarWidth }}
+      >
+        <div className="flex w-14 shrink-0 items-start justify-end pr-2 pt-1.5 text-right text-[10px] leading-tight text-muted-foreground">
+          All-day tasks
+        </div>
+        {days.map((d, dayIndex) => (
+          <div
+            key={d.toISOString()}
+            data-allday-day={dayIndex}
+            onContextMenu={(e) => onEmptyAllDayContextMenu(e, d)}
+            className={cn(
+              "flex min-w-0 flex-1 flex-col gap-0.5 overflow-y-auto border-l border-border p-1",
+              weekendClass(d),
+              (allDayTarget === dayIndex || allDayHighlightDay === dayIndex) &&
+                "bg-primary/10 ring-2 ring-inset ring-primary/50",
+            )}
+          >
+            <AnimatePresence initial={false}>
+              {dayAllDayReminders(rems, d).map((r) => (
+                <motion.div
+                  key={r.id ?? r.title}
+                  layout
+                  initial={POOF_INITIAL}
+                  animate={POOF_ANIMATE}
+                  exit={POOF_EXIT}
+                  transition={POOF_TRANSITION}
+                  onPointerDown={(e) => r.id && onReminderDragStart(e, r)}
+                  onClick={() => onEditReminder(r)}
+                  onContextMenu={(e) => {
+                    e.stopPropagation();
+                    onReminderContextMenu(e, r);
+                  }}
+                  onMouseEnter={(e) => showHover(e, { kind: "reminder", reminder: r })}
+                  onMouseMove={(e) => showHover(e, { kind: "reminder", reminder: r })}
+                  onMouseLeave={hideHover}
+                  className="flex w-full shrink-0 cursor-grab select-none items-center gap-1 truncate rounded border border-dashed px-1 py-0.5 text-[11px] active:cursor-grabbing"
+                  style={{ borderColor: r.color ?? FALLBACK_COLOR }}
+                  title="Drag onto the grid to schedule"
+                >
+                  <ReminderToggle
+                    completed={r.completed}
+                    color={r.color}
+                    onToggle={() => onToggleReminder(r, !r.completed)}
+                  />
+                  <span
+                    className={cn(
+                      "min-w-0 truncate",
+                      r.completed && "line-through opacity-60",
+                    )}
+                  >
+                    {r.title}
+                  </span>
+                  {r.recurring && <Repeat className="size-3 shrink-0 opacity-70" />}
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          </div>
+        ))}
+        {!anyUntimed && (
+          <div className="pointer-events-none absolute inset-y-0 left-14 right-0 flex items-center justify-center px-6 text-center text-[11px] text-muted-foreground/70">
+            Reminders with a date but no time live here — drag one onto the grid to give it a time, or drag a scheduled reminder down here to clear its time.
+          </div>
+        )}
+      </div>
+
+      {hover && <HoverCard {...hover} />}
     </div>
+  );
+}
+
+interface EventHover {
+  kind: "event";
+  event: EventDto;
+}
+interface ReminderHover {
+  kind: "reminder";
+  reminder: ReminderDto;
+}
+type HoverInfo = EventHover | ReminderHover;
+
+function HoverCard({ x, y, info }: { x: number; y: number; info: HoverInfo }) {
+  const flipX = x > window.innerWidth - 280;
+  const style: CSSProperties = {
+    left: flipX ? x - 14 : x + 14,
+    top: Math.min(y + 14, window.innerHeight - 130),
+    transform: flipX ? "translateX(-100%)" : undefined,
+  };
+
+  const color = (info.kind === "event" ? info.event.color : info.reminder.color) ?? FALLBACK_COLOR;
+  let title: string;
+  let typeLine: string;
+  let when: string;
+  let location: string | null = null;
+  let completed = false;
+  let recurring = false;
+
+  if (info.kind === "event") {
+    const e = info.event;
+    title = e.title || "(untitled event)";
+    typeLine = e.calendarTitle ? `Event · ${e.calendarTitle}` : "Event";
+    when = e.allDay
+      ? "All day"
+      : `${format(parseISO(e.start), "EEE, MMM d · HH:mm")} – ${format(parseISO(e.end), "HH:mm")}`;
+    location = e.location;
+  } else {
+    const r = info.reminder;
+    title = r.title || "(untitled reminder)";
+    typeLine = r.listTitle ? `Reminder · ${r.listTitle}` : "Reminder";
+    when = r.due
+      ? r.due.includes("T")
+        ? format(parseISO(r.due), "EEE, MMM d · HH:mm")
+        : format(parseISO(r.due), "EEE, MMM d")
+      : "No due date";
+    completed = r.completed;
+    recurring = r.recurring;
+  }
+
+  return createPortal(
+    <div
+      className="pointer-events-none fixed z-[80] w-64 rounded-md border border-border bg-popover p-2.5 text-popover-foreground shadow-lg"
+      style={style}
+    >
+      <div className={cn("truncate text-sm font-semibold", completed && "line-through opacity-70")}>
+        {title}
+      </div>
+      <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+        <span
+          className="size-2.5 shrink-0 rounded-full border border-black/10"
+          style={{ backgroundColor: color }}
+        />
+        <span className="truncate">{typeLine}</span>
+        {recurring && <Repeat className="size-3 shrink-0" />}
+      </div>
+      <div className="mt-0.5 text-xs text-muted-foreground">{when}</div>
+      {location && (
+        <div className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
+          <MapPin className="size-3 shrink-0" />
+          <span className="truncate">{location}</span>
+        </div>
+      )}
+    </div>,
+    document.body,
   );
 }
 
@@ -523,12 +687,16 @@ function EventBlock({
   onBeginDrag,
   onEdit,
   onContextMenu,
+  onHover,
+  onHoverEnd,
 }: {
   block: GridBlock;
   dimmed: boolean;
   onBeginDrag: (e: React.PointerEvent, mode: DragMode) => void;
   onEdit: () => void;
   onContextMenu: (e: React.MouseEvent) => void;
+  onHover: (e: React.MouseEvent) => void;
+  onHoverEnd: () => void;
 }) {
   const { title, color, startMin, endMin, col, cols } = block;
   const accent = color ?? FALLBACK_COLOR;
@@ -544,13 +712,15 @@ function EventBlock({
       onPointerDown={(e) => draggable && onBeginDrag(e, "move")}
       onClick={() => !draggable && onEdit()}
       onContextMenu={onContextMenu}
+      onMouseEnter={onHover}
+      onMouseMove={onHover}
+      onMouseLeave={onHoverEnd}
       className={cn(
         "absolute overflow-hidden rounded-md border-l-2 px-1.5 py-0.5 text-[11px] leading-tight shadow-sm",
         dimmed && "pointer-events-none",
         draggable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
       )}
       style={{ top, height, ...colStyle(col, cols), backgroundColor: tint(color), borderLeftColor: accent }}
-      title={title}
     >
       {draggable && (
         <div
@@ -580,12 +750,16 @@ function ReminderBlock({
   onBeginDrag,
   onContextMenu,
   onToggleComplete,
+  onHover,
+  onHoverEnd,
 }: {
   block: GridBlock;
   dimmed: boolean;
   onBeginDrag: (e: React.PointerEvent) => void;
   onContextMenu: (e: React.MouseEvent) => void;
   onToggleComplete: () => void;
+  onHover: (e: React.MouseEvent) => void;
+  onHoverEnd: () => void;
 }) {
   const { title, color, startMin, endMin, col, cols, completed } = block;
   const accent = color ?? FALLBACK_COLOR;
@@ -599,12 +773,14 @@ function ReminderBlock({
       transition={POOF_TRANSITION}
       onPointerDown={onBeginDrag}
       onContextMenu={onContextMenu}
+      onMouseEnter={onHover}
+      onMouseMove={onHover}
+      onMouseLeave={onHoverEnd}
       className={cn(
         "absolute flex cursor-grab items-center gap-1 overflow-hidden rounded-md border border-dashed bg-background/80 px-1.5 shadow-sm active:cursor-grabbing",
         dimmed && "pointer-events-none",
       )}
       style={{ top, height, ...colStyle(col, cols), borderColor: accent }}
-      title={`Reminder: ${title}`}
     >
       <ReminderToggle completed={completed} color={color} onToggle={onToggleComplete} />
       <span className={cn("pointer-events-none truncate text-[11px] font-medium leading-tight", completed && "line-through opacity-60")}>

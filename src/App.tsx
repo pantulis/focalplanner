@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { addMinutes, isSameDay, isToday, parseISO, startOfDay } from "date-fns";
+import { addMinutes, format, isSameDay, isToday, parseISO, startOfDay } from "date-fns";
 import { useQueryClient } from "@tanstack/react-query";
 import { listen } from "@tauri-apps/api/event";
 import { toast } from "sonner";
@@ -66,7 +66,6 @@ import { TimeGridView } from "@/components/TimeGridView";
 import { ReminderList, type StatusFilter } from "@/components/ReminderList";
 import { EventInspector } from "@/components/EventInspector";
 import { ReminderInspector } from "@/components/ReminderInspector";
-import { AreasDialog } from "@/components/AreasDialog";
 import { SettingsDialog, type Pane as SettingsPane } from "@/components/SettingsDialog";
 import { ConfirmDialog, type ConfirmOptions } from "@/components/ConfirmDialog";
 import { FeatureTour } from "@/components/FeatureTour";
@@ -103,8 +102,8 @@ export default function App() {
 }
 
 const SECTION_TITLE: Record<Section, string> = {
-  today: "Today",
-  weekly: "This Week",
+  today: "Daily",
+  weekly: "Weekly",
   planner: "Planner",
 };
 
@@ -168,7 +167,6 @@ function Planner() {
       [activeArea]: { ...(prev[activeArea] ?? { list: "all", status: "today" }), ...patch },
     }));
   const [showReminders, setShowReminders] = useState(true);
-  const [areasOpen, setAreasOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsPane, setSettingsPane] = useState<SettingsPane>("general");
 
@@ -322,30 +320,40 @@ function Planner() {
   // Pointer-based (HTML5 drag-and-drop is unreliable in WKWebView). A floating
   // ghost follows the cursor; the day column under the pointer is found via
   // elementFromPoint + the `data-grid-day` attribute the grid renders.
+  type RemDropTarget =
+    | { kind: "grid"; day: number; minute: number }
+    | { kind: "allday"; day: number };
   const [remDrag, setRemDrag] = useState<{
     reminder: ReminderDto;
     x: number;
     y: number;
-    over: number | null;
-    minute: number | null;
+    target: RemDropTarget | null;
   } | null>(null);
 
   const REM_SNAP = 15; // snap drops to :00/:15/:30/:45 — mirrors TimeGridView
 
-  // Day index + snapped minute under a pointer, or null when not over the grid.
-  function dropAt(x: number, y: number): { dayIndex: number; minute: number } | null {
+  // Drop target under a pointer: a timed grid slot, an all-day column, or none.
+  function dropAt(x: number, y: number): RemDropTarget | null {
     const el = document.elementFromPoint(x, y) as HTMLElement | null;
     const col = el?.closest<HTMLElement>("[data-grid-day]");
-    if (!col) return null;
-    const dayIndex = Number(col.dataset.gridDay);
-    if (Number.isNaN(dayIndex) || !days[dayIndex]) return null;
-    const top = col.getBoundingClientRect().top;
-    const minute = clamp(
-      Math.round((((y - top) / HOUR_HEIGHT) * 60) / REM_SNAP) * REM_SNAP,
-      0,
-      DAY_MINUTES - REM_SNAP,
-    );
-    return { dayIndex, minute };
+    if (col) {
+      const dayIndex = Number(col.dataset.gridDay);
+      if (!Number.isNaN(dayIndex) && days[dayIndex]) {
+        const top = col.getBoundingClientRect().top;
+        const minute = clamp(
+          Math.round((((y - top) / HOUR_HEIGHT) * 60) / REM_SNAP) * REM_SNAP,
+          0,
+          DAY_MINUTES - REM_SNAP,
+        );
+        return { kind: "grid", day: dayIndex, minute };
+      }
+    }
+    const allday = el?.closest<HTMLElement>("[data-allday-day]");
+    if (allday) {
+      const dayIndex = Number(allday.dataset.alldayDay);
+      if (!Number.isNaN(dayIndex) && days[dayIndex]) return { kind: "allday", day: dayIndex };
+    }
+    return null;
   }
 
   function startReminderDrag(e: React.PointerEvent, reminder: ReminderDto) {
@@ -359,23 +367,20 @@ function Planner() {
         if (Math.hypot(ev.clientX - startX, ev.clientY - startY) < 5) return;
         active = true;
       }
-      const d = dropAt(ev.clientX, ev.clientY);
-      setRemDrag({
-        reminder,
-        x: ev.clientX,
-        y: ev.clientY,
-        over: d?.dayIndex ?? null,
-        minute: d?.minute ?? null,
-      });
+      setRemDrag({ reminder, x: ev.clientX, y: ev.clientY, target: dropAt(ev.clientX, ev.clientY) });
     };
     const onUp = (ev: PointerEvent) => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       if (active) {
-        const d = dropAt(ev.clientX, ev.clientY);
-        if (d) {
-          const start = addMinutes(startOfDay(days[d.dayIndex]), d.minute);
-          updateReminderDue(reminder, toLocalDateTime(start));
+        const t = dropAt(ev.clientX, ev.clientY);
+        if (t?.kind === "grid") {
+          updateReminderDue(
+            reminder,
+            toLocalDateTime(addMinutes(startOfDay(days[t.day]), t.minute)),
+          );
+        } else if (t?.kind === "allday") {
+          updateReminderDue(reminder, format(days[t.day], "yyyy-MM-dd"));
         }
       }
       setRemDrag(null);
@@ -693,14 +698,7 @@ function Planner() {
       visibleLists,
       areaMembers(areaConfig, activeArea).listIds,
     );
-    const items: MenuNode[] = [
-      {
-        id: "edit",
-        label: "Edit…",
-        icon: Pencil,
-        onSelect: () => openReminderEditor(reminder),
-      },
-    ];
+    const items: MenuNode[] = [];
     if (!reminder.completed && reminder.id) {
       items.push({
         id: "complete",
@@ -713,6 +711,12 @@ function Planner() {
           ),
       });
     }
+    items.push({
+      id: "edit",
+      label: "Edit…",
+      icon: Pencil,
+      onSelect: () => openReminderEditor(reminder),
+    });
     items.push(
       {
         id: "move",
@@ -820,6 +824,32 @@ function Planner() {
       x: e.clientX,
       y: e.clientY,
       items: [{ id: "create-reminder", label: "Create reminder in", icon: ListTodo, children }],
+    });
+  }
+
+  // Right-click an All-day tasks column → create a date-only reminder on that day.
+  function openAllDayReminderMenu(e: React.MouseEvent, day: Date) {
+    e.preventDefault();
+    const due = format(day, "yyyy-MM-dd");
+    const children: MenuNode[] = eligibleLists.length
+      ? eligibleLists.map((c) => ({
+          id: `allday-list-${c.id}`,
+          label: c.title,
+          colorDot: c.color,
+          onSelect: () => openReminderEditor(null, due, c.id),
+        }))
+      : [{ id: "none", label: "No lists in this area", disabled: true }];
+    setMenu({
+      x: e.clientX,
+      y: e.clientY,
+      items: [
+        {
+          id: "create-allday-reminder",
+          label: `New reminder · ${format(day, "EEE, MMM d")}`,
+          icon: ListTodo,
+          children,
+        },
+      ],
     });
   }
 
@@ -970,7 +1000,7 @@ function Planner() {
         areas={availableAreas}
         activeArea={activeArea}
         onSelectArea={setActiveArea}
-        onOpenAreas={() => setAreasOpen(true)}
+        onOpenAreas={() => openSettings("areas")}
         onOpenSettings={() => openSettings("general")}
         onOpenSync={() => openSettings("sync")}
         sync={{ connected: sync.account.connected, syncing: sync.syncing, error: sync.error }}
@@ -1019,10 +1049,15 @@ function Planner() {
                 onEventContextMenu={openEventMenu}
                 onReminderContextMenu={openReminderMenu}
                 dropPreview={
-                  remDrag && remDrag.over != null && remDrag.minute != null
-                    ? { day: remDrag.over, minute: remDrag.minute }
+                  remDrag?.target?.kind === "grid"
+                    ? { day: remDrag.target.day, minute: remDrag.target.minute }
                     : null
                 }
+                allDayHighlightDay={
+                  remDrag?.target?.kind === "allday" ? remDrag.target.day : null
+                }
+                onReminderDragStart={startReminderDrag}
+                onEmptyAllDayContextMenu={openAllDayReminderMenu}
                 workHours={{
                   workdayStart: settings.workdayStart,
                   workdayEnd: settings.workdayEnd,
@@ -1090,15 +1125,6 @@ function Planner() {
         </div>
       </main>
 
-      <AreasDialog
-        open={areasOpen}
-        onClose={() => setAreasOpen(false)}
-        calendars={visibleCalendars}
-        lists={visibleLists}
-        config={areaConfig}
-        onChange={setAreaConfig}
-      />
-
       <SettingsDialog
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
@@ -1106,6 +1132,10 @@ function Planner() {
         onChange={updateSettings}
         calendars={calendars.data?.events ?? []}
         lists={calendars.data?.reminderLists ?? []}
+        areaCalendars={visibleCalendars}
+        areaLists={visibleLists}
+        areaConfig={areaConfig}
+        onAreaConfigChange={setAreaConfig}
         sync={sync}
         initialPane={settingsPane}
         onReplayTour={replayTour}
@@ -1151,9 +1181,11 @@ function Planner() {
           style={{ left: remDrag.x + 12, top: remDrag.y + 12 }}
         >
           <span className="truncate">{remDrag.reminder.title}</span>
-          {remDrag.minute != null && (
+          {remDrag.target && (
             <span className="shrink-0 font-medium text-primary">
-              {fmtMinute(remDrag.minute)}
+              {remDrag.target.kind === "grid"
+                ? `${format(days[remDrag.target.day], "EEE")} ${fmtMinute(remDrag.target.minute)}`
+                : `${format(days[remDrag.target.day], "EEE")} · all day`}
             </span>
           )}
         </div>
