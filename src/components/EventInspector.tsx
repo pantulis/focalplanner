@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { parseISO } from "date-fns";
 import { Trash2, X } from "lucide-react";
+import { Sheet } from "@/components/ui/sheet";
 import type { CalendarDto, EventDto, EventInput } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { DateTimePicker } from "@/components/ui/date-time-picker";
@@ -106,17 +107,6 @@ export function EventInspector({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, event, initialStart]);
 
-  // Close on Escape.
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
-
-  if (!open) return null;
 
   function submit() {
     if (!title.trim()) return;
@@ -139,7 +129,7 @@ export function EventInspector({
   }
 
   return (
-    <aside className="flex h-full w-[340px] shrink-0 flex-col border-l border-border bg-background">
+    <Sheet open={open} onOpenChange={(o) => !o && onClose()} className="w-[360px]">
       <header className="flex items-center justify-between border-b border-border px-4 py-3">
         <h2 className="text-sm font-semibold">{event ? "Event" : "New event"}</h2>
         <button
@@ -270,6 +260,6 @@ export function EventInspector({
           {event ? "Save" : "Create"}
         </Button>
       </footer>
-    </aside>
+    </Sheet>
   );
 }

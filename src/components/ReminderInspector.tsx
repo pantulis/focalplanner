@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { parseISO } from "date-fns";
 import { Circle, CircleCheck, Repeat, Trash2, X } from "lucide-react";
+import { Sheet } from "@/components/ui/sheet";
 import type { CalendarDto, ReminderDto, ReminderInput } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -91,17 +92,6 @@ export function ReminderInspector({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, reminder]);
 
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
-
-  if (!open) return null;
-
   function toggleComplete() {
     if (!reminder?.id) return;
     const next = !completed;
@@ -124,7 +114,7 @@ export function ReminderInspector({
   }
 
   return (
-    <aside className="flex h-full w-[340px] shrink-0 flex-col border-l border-border bg-background">
+    <Sheet open={open} onOpenChange={(o) => !o && onClose()} className="w-[360px]">
       <header className="flex items-center justify-between border-b border-border px-4 py-3">
         <h2 className="text-sm font-semibold">
           {reminder ? "Reminder" : "New reminder"}
@@ -272,6 +262,6 @@ export function ReminderInspector({
           {reminder ? "Save" : "Create"}
         </Button>
       </footer>
-    </aside>
+    </Sheet>
   );
 }

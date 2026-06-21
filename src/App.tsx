@@ -944,7 +944,6 @@ function Planner() {
     reminderMx.remove.isPending;
 
   const isPlanner = section === "planner";
-  const inspectorOpen = eventDialog.open || reminderDialog.open;
 
   // macOS-style keyboard shortcuts.
   useEffect(() => {
@@ -1130,9 +1129,42 @@ function Planner() {
                 }}
               />
             )}
+
+            <EventInspector
+              open={eventDialog.open}
+              onClose={() => setEventDialog((s) => ({ ...s, open: false }))}
+              event={eventDialog.event}
+              initialStart={eventDialog.initialStart}
+              initialEnd={eventDialog.initialEnd}
+              initialCalendarId={eventDialog.initialCalendarId}
+              calendars={eligibleCalendars}
+              onSubmit={submitEvent}
+              onDelete={deleteEvent}
+              weekStartsOn={weekStartsOn}
+              contextHours={settings.inspectorContextHours}
+              busy={eventBusy}
+            />
+
+            <ReminderInspector
+              open={reminderDialog.open}
+              onClose={() => setReminderDialog((s) => ({ ...s, open: false }))}
+              reminder={reminderDialog.reminder}
+              initialDue={reminderDialog.initialDue}
+              initialListId={reminderDialog.initialListId}
+              lists={eligibleLists}
+              onSubmit={submitReminder}
+              onDelete={deleteReminder}
+              onToggleComplete={(r, completed) =>
+                r.id &&
+                reminderMx.toggle.mutate({ id: r.id, completed }, { onError: fail })
+              }
+              weekStartsOn={weekStartsOn}
+              contextHours={settings.inspectorContextHours}
+              busy={reminderBusy}
+            />
           </div>
 
-          {showReminders && !inspectorOpen && (
+          {showReminders && (
             <ReminderList
               reminders={filteredReminders}
               groups={availableGroups}
@@ -1151,41 +1183,6 @@ function Planner() {
               onReminderDragStart={startReminderDrag}
             />
           )}
-
-          <EventInspector
-            open={eventDialog.open}
-            onClose={() =>
-              setEventDialog({ open: false, event: null, initialStart: null, initialEnd: null, initialCalendarId: null })
-            }
-            event={eventDialog.event}
-            initialStart={eventDialog.initialStart}
-            initialEnd={eventDialog.initialEnd}
-            initialCalendarId={eventDialog.initialCalendarId}
-            calendars={eligibleCalendars}
-            onSubmit={submitEvent}
-            onDelete={deleteEvent}
-            weekStartsOn={weekStartsOn}
-            contextHours={settings.inspectorContextHours}
-            busy={eventBusy}
-          />
-
-          <ReminderInspector
-            open={reminderDialog.open}
-            onClose={() => setReminderDialog({ open: false, reminder: null, initialDue: null, initialListId: null })}
-            reminder={reminderDialog.reminder}
-            initialDue={reminderDialog.initialDue}
-            initialListId={reminderDialog.initialListId}
-            lists={eligibleLists}
-            onSubmit={submitReminder}
-            onDelete={deleteReminder}
-            onToggleComplete={(r, completed) =>
-              r.id &&
-              reminderMx.toggle.mutate({ id: r.id, completed }, { onError: fail })
-            }
-            weekStartsOn={weekStartsOn}
-            contextHours={settings.inspectorContextHours}
-            busy={reminderBusy}
-          />
         </div>
       </main>
 
