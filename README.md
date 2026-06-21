@@ -46,6 +46,19 @@ approval is affected.
 - Full **CRUD** for both events and reminders (create, edit, complete, delete).
 - Native data: reads/writes the same store as Apple Calendar & Reminders.
 
+## Screenshots
+
+|  |  |
+| :---: | :---: |
+| ![Daily planner](screenshots/normalized/1x/daily_planner.webp)<br>**Daily** — agenda with reminders | ![Weekly planner](screenshots/normalized/1x/weekly_planner.webp)<br>**Weekly** — multi-day grid |
+| ![Time Sector planner](screenshots/normalized/1x/planning.webp)<br>**Planner** — Time Sector lanes | ![Review mode](screenshots/normalized/1x/planning_review_mode.webp)<br>**Review** — Areas of Focus |
+| ![Task inspector](screenshots/normalized/1x/task_inspector.webp)<br>**Task inspector** — edit & schedule | ![Scheduling context](screenshots/normalized/1x/scheduling_context.webp)<br>**Scheduling context** — nearby items |
+| ![Areas of Focus](screenshots/normalized/1x/focus_areas_config.webp)<br>**Areas of Focus** — map calendars & lists | ![Themes](screenshots/normalized/1x/theme_support.webp)<br>**Themes** — light & dark |
+
+> Screenshots use built-in **Demo Mode** sample data. Regenerate the framed
+> images with [`screenshots/normalize.sh`](screenshots/normalize.sh) (`--webp`
+> for the README-sized versions).
+
 ## Architecture
 
 | Layer    | Detail                                                                 |

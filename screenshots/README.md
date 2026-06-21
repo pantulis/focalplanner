@@ -1,39 +1,26 @@
 # Screenshots
 
-Put PNG screenshots of FocalPlanner here (referenced from the top-level `README.md`).
+Source captures of FocalPlanner and the framed versions referenced from the
+top-level `README.md`.
 
-> ⚠️ FocalPlanner shows your **real** Calendar events and Reminders. Before capturing,
-> put the app into a state with **no personal data** using one of the approaches below.
+## Workflow
 
-## Capturing on macOS
+1. **Populate safe data.** Launch a dev/`--debug` build and turn on **Demo Mode**
+   (About dialog → *Enter Demo Mode*). It swaps in built-in sample calendars,
+   events and reminders dated around today, so no personal data is captured. It's
+   fully non-destructive — your real Calendar and Reminders are never touched.
+2. **Capture the window.** `⌘⇧4`, then **Space**, then click the FocalPlanner
+   window (clean shot with a drop shadow). Save the raw `*.png` into this folder.
+3. **Frame uniformly.** Run [`./normalize.sh`](normalize.sh) to crop each shot to
+   its window and re-center it on a uniform backdrop with an equal border:
+   - `normalized/` — full-res (2×) frames, identical dimensions
+   - `normalized/1x/*.png` — half-size versions
+   - `normalized/1x/*.webp` — lightweight README versions (`./normalize.sh --webp`)
 
-- **A single window:** `⌘⇧4`, then press **Space**, then click the FocalPlanner window
-  (gives a clean shot with a drop shadow, no desktop background).
-- **A region:** `⌘⇧4` and drag. Or `⌘⇧5` for the capture toolbar.
-- Screenshots land on your Desktop by default — move them into this folder.
+The raw `*.png` in this folder are the originals and are never modified by the
+script. The README embeds the `.webp` files.
 
-## Avoiding personal data (pick one)
+## Tunables
 
-1. **Hide your real calendars/lists** (fastest, fully reversible):
-   Settings → **Calendars** → uncheck every calendar and reminder list. The planner and
-   reminders panel go empty, so you can screenshot the **UI chrome** (sidebar, toolbar,
-   day/week grid, weekend shading, time rail) with nothing private. Re-check them after.
-
-2. **Use a throwaway demo calendar/list:** in Apple Calendar/Reminders create e.g.
-   "Demo" with a few harmless entries ("Lunch", "Gym"), assign it to one Area of Focus,
-   and screenshot that area.
-
-3. **Chrome-only screens (no data at all):** Settings → **Appearance** (theme swatches,
-   typeface, UI scale), the **About** dialog, the **Areas of Focus** dialog (rename or
-   avoid private calendar names), and the **Planner** placeholder.
-
-If anything private slips in, blur it before committing (Preview → Tools → Annotate, or
-`magick in.png -region X,Y,WxH -blur 0x12 out.png`).
-
-## Suggested shots
-
-- `today.png` — Today view (empty or demo data)
-- `weekly.png` — Weekly view (weekend columns tinted)
-- `themes.png` — Settings → Appearance (theme picker)
-- `areas.png` — Areas of Focus dialog
-- `about.png` — About dialog
+Border width, backdrop gradient, shadow, downscale factor and WebP quality are
+all near the top of `normalize.sh`.
