@@ -61,6 +61,8 @@ import { useMenubarTray } from "@/lib/tray";
 import { ContextMenu, type MenuNode } from "@/components/ui/context-menu";
 import { PermissionGate } from "@/components/PermissionGate";
 import { AppSidebar, type Section } from "@/components/AppSidebar";
+import { UpdateBanner } from "@/components/UpdateBanner";
+import { useUpdateCheck } from "@/lib/useUpdateCheck";
 import { PlannerToolbar } from "@/components/PlannerToolbar";
 import { TimeGridView } from "@/components/TimeGridView";
 import { FocusBoard } from "@/components/FocusBoard";
@@ -114,6 +116,7 @@ function Planner() {
   const [areaConfig, setAreaConfig] = useAreaConfig();
   const { settings, update: updateSettings, loaded: settingsLoaded } = useSettings();
   const queryClient = useQueryClient();
+  const { update, dismiss: dismissUpdate } = useUpdateCheck();
 
   useMenubarTray(
     settingsLoaded && settings.menubarEnabled,
@@ -1055,6 +1058,7 @@ function Planner() {
       />
 
       <main className="flex min-w-0 flex-1 flex-col">
+        {update && <UpdateBanner update={update} onDismiss={dismissUpdate} />}
         <PlannerToolbar
           title={SECTION_TITLE[section]}
           label={viewLabel(view, anchor, weekStartsOn)}
