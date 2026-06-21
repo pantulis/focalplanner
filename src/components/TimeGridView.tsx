@@ -30,7 +30,8 @@ interface Props {
   onUpdateReminderDue: (reminder: ReminderDto, dueLocal: string) => void;
   onEventContextMenu: (e: React.MouseEvent, event: EventDto) => void;
   onReminderContextMenu: (e: React.MouseEvent, reminder: ReminderDto) => void;
-  onDropReminder: (reminderId: string, start: Date) => void;
+  /** Target day + snapped minute while a reminder is dragged in from the sidebar. */
+  dropPreview?: { day: number; minute: number } | null;
   workHours: {
     workdayStart: number;
     workdayEnd: number;
@@ -98,7 +99,7 @@ export function TimeGridView({
   onUpdateReminderDue,
   onEventContextMenu,
   onReminderContextMenu,
-  onDropReminder,
+  dropPreview,
   workHours,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -107,12 +108,28 @@ export function TimeGridView({
   const rems = reminders ?? [];
 
   const [drag, setDrag] = useState<DragState | null>(null);
-  const [dropDay, setDropDay] = useState<number | null>(null);
   const dragRef = useRef<DragState | null>(null);
   const setBoth = (d: DragState | null) => {
     dragRef.current = d;
     setDrag(d);
   };
+
+  // Width the vertical scrollbar steals from the scrolling grid. Reserved as
+  // right-padding on the non-scrolling header rows so columns line up exactly.
+  const [scrollbarWidth, setScrollbarWidth] = useState(0);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const measure = () => setScrollbarWidth(el.offsetWidth - el.clientWidth);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    window.addEventListener("resize", measure);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, []);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -242,13 +259,13 @@ export function TimeGridView({
   return (
     <div className="flex h-full select-none flex-col">
       {/* Day headers */}
-      <div className="flex border-b border-border">
+      <div className="flex border-b border-border" style={{ paddingRight: scrollbarWidth }}>
         <div className="w-14 shrink-0" />
         {days.map((d) => (
           <div
             key={d.toISOString()}
             className={cn(
-              "flex-1 border-l border-border px-2 py-1.5 text-center",
+              "min-w-0 flex-1 border-l border-border px-2 py-1.5 text-center",
               weekendClass(d),
             )}
           >
@@ -269,7 +286,7 @@ export function TimeGridView({
 
       {/* All-day / undated row */}
       {anyAllDay && (
-        <div className="flex border-b border-border">
+        <div className="flex border-b border-border" style={{ paddingRight: scrollbarWidth }}>
           <div className="flex w-14 shrink-0 items-start justify-end pr-2 pt-1 text-[10px] uppercase text-muted-foreground">
             all-day
           </div>
@@ -277,7 +294,7 @@ export function TimeGridView({
             <div
               key={d.toISOString()}
               className={cn(
-                "min-h-7 flex-1 space-y-0.5 border-l border-border p-1",
+                "min-h-7 min-w-0 flex-1 space-y-0.5 border-l border-border p-1",
                 weekendClass(d),
               )}
             >
@@ -318,7 +335,7 @@ export function TimeGridView({
                     color={r.color}
                     onToggle={() => onToggleReminder(r, !r.completed)}
                   />
-                  <span className={cn("truncate", r.completed && "line-through opacity-60")}>
+                  <span className={cn("min-w-0 truncate", r.completed && "line-through opacity-60")}>
                     {r.title}
                   </span>
                   {r.recurring && <Repeat className="size-3 shrink-0 opacity-70" />}
@@ -355,24 +372,15 @@ export function TimeGridView({
               return (
                 <div
                   key={d.toISOString()}
+                  data-grid-day={dayIndex}
                   className={cn(
                     "relative flex-1 border-l border-border",
                     weekendClass(d),
-                    dropDay === dayIndex && "ring-2 ring-inset ring-primary/60",
+                    dropPreview?.day === dayIndex && "ring-2 ring-inset ring-primary/60",
                   )}
                   onContextMenu={(e) =>
                     onEmptyContextMenu(e, addMinutes(startOfDay(d), minuteFromY(e.clientY)))
                   }
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    if (dropDay !== dayIndex) setDropDay(dayIndex);
-                  }}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    setDropDay(null);
-                    const id = e.dataTransfer.getData("text/plain");
-                    if (id) onDropReminder(id, addMinutes(startOfDay(d), minuteFromY(e.clientY)));
-                  }}
                 >
                   {HOURS.map((h) => (
                     <div
@@ -410,6 +418,17 @@ export function TimeGridView({
                       style={{ top: nowOffsetPx() }}
                     >
                       <div className="absolute -left-1 -top-1 size-2 rounded-full bg-red-500" />
+                    </div>
+                  )}
+
+                  {dropPreview?.day === dayIndex && (
+                    <div
+                      className="pointer-events-none absolute inset-x-0 z-20 border-t-2 border-primary"
+                      style={{ top: (dropPreview.minute / 60) * HOUR_HEIGHT }}
+                    >
+                      <span className="absolute -top-2.5 left-1 rounded bg-primary px-1 py-0.5 text-[10px] font-semibold leading-none text-primary-foreground">
+                        {minutesLabel(dropPreview.minute)}
+                      </span>
                     </div>
                   )}
 

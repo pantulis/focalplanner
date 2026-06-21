@@ -21,6 +21,8 @@ export interface MenuNode {
   colorDot?: string | null;
   /** Subdued trailing hint text (e.g. resolved date/time). */
   hint?: string;
+  /** Small trailing badge text (e.g. "Current"). */
+  pill?: string;
   disabled?: boolean;
 }
 
@@ -101,18 +103,25 @@ function Row({
           }}
           className={cn(
             "flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm outline-none",
-            "hover:bg-accent disabled:opacity-40",
+            "hover:bg-accent disabled:cursor-default",
             item.danger && "text-destructive",
           )}
         >
-          {Icon && <Icon className="size-3.5 shrink-0" />}
+          {Icon && <Icon className={cn("size-3.5 shrink-0", item.disabled && "opacity-40")} />}
           {item.colorDot !== undefined && (
             <span
               className="size-2.5 shrink-0 rounded-full border border-black/10"
               style={{ backgroundColor: item.colorDot ?? "var(--muted-foreground)" }}
             />
           )}
-          <span className="flex-1 truncate">{item.label}</span>
+          <span className={cn("flex-1 truncate", item.disabled && "text-muted-foreground")}>
+            {item.label}
+          </span>
+          {item.pill && (
+            <span className="shrink-0 rounded-full bg-primary px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wide text-primary-foreground">
+              {item.pill}
+            </span>
+          )}
           {item.hint && (
             <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
               {item.hint}

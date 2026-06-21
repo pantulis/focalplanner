@@ -14,6 +14,8 @@ use serde_json::Value;
 const GITHUB_CLIENT_ID: &str = "Ov23liUGPKWM1NlflyB3";
 
 const SCOPE: &str = "gist";
+// Only referenced by the Keychain-backed store (release builds).
+#[cfg_attr(debug_assertions, allow(dead_code))]
 const KEYCHAIN_SERVICE: &str = "net.lupion.focalplanner";
 const KEYCHAIN_ACCOUNT: &str = "github-token";
 const GIST_FILE: &str = "focalplanner-sync.json";
@@ -24,16 +26,71 @@ static CANCEL_POLL: AtomicBool = AtomicBool::new(false);
 
 type R<T> = Result<T, String>;
 
-fn entry() -> R<keyring::Entry> {
-    keyring::Entry::new(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT).map_err(|e| e.to_string())
+// ── Secret storage ──────────────────────────────────────────────────────────
+// Release builds keep secrets in the macOS Keychain. Debug builds use a plaintext
+// file under Application Support instead: each unsigned rebuild looks like a new
+// app to the Keychain, so it would otherwise re-prompt for access on every run.
+// The optional sync passphrase still works (it encrypts the gist contents); in
+// development it is simply not itself stored encrypted.
+#[cfg(not(debug_assertions))]
+mod secret_store {
+    use super::{KEYCHAIN_SERVICE, R};
+
+    fn entry(account: &str) -> R<keyring::Entry> {
+        keyring::Entry::new(KEYCHAIN_SERVICE, account).map_err(|e| e.to_string())
+    }
+    pub fn get(account: &str) -> R<Option<String>> {
+        match entry(account)?.get_password() {
+            Ok(v) => Ok(Some(v)),
+            Err(keyring::Error::NoEntry) => Ok(None),
+            Err(e) => Err(e.to_string()),
+        }
+    }
+    pub fn set(account: &str, value: &str) -> R<()> {
+        entry(account)?.set_password(value).map_err(|e| e.to_string())
+    }
+    pub fn delete(account: &str) -> R<()> {
+        match entry(account)?.delete_credential() {
+            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+            Err(e) => Err(e.to_string()),
+        }
+    }
+}
+
+#[cfg(debug_assertions)]
+mod secret_store {
+    use super::R;
+    use std::path::PathBuf;
+
+    fn dir() -> PathBuf {
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+        PathBuf::from(home).join("Library/Application Support/net.lupion.focalplanner-dev")
+    }
+    fn path(account: &str) -> PathBuf {
+        dir().join(format!("{account}.secret"))
+    }
+    pub fn get(account: &str) -> R<Option<String>> {
+        match std::fs::read_to_string(path(account)) {
+            Ok(v) => Ok(Some(v)),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(e) => Err(e.to_string()),
+        }
+    }
+    pub fn set(account: &str, value: &str) -> R<()> {
+        std::fs::create_dir_all(dir()).map_err(|e| e.to_string())?;
+        std::fs::write(path(account), value).map_err(|e| e.to_string())
+    }
+    pub fn delete(account: &str) -> R<()> {
+        match std::fs::remove_file(path(account)) {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(e) => Err(e.to_string()),
+        }
+    }
 }
 
 fn read_token() -> R<Option<String>> {
-    match entry()?.get_password() {
-        Ok(t) => Ok(Some(t)),
-        Err(keyring::Error::NoEntry) => Ok(None),
-        Err(e) => Err(e.to_string()),
-    }
+    secret_store::get(KEYCHAIN_ACCOUNT)
 }
 
 fn require_token() -> R<String> {
@@ -44,16 +101,8 @@ fn require_token() -> R<String> {
 
 const KEYCHAIN_PASSPHRASE: &str = "sync-passphrase";
 
-fn passphrase_entry() -> R<keyring::Entry> {
-    keyring::Entry::new(KEYCHAIN_SERVICE, KEYCHAIN_PASSPHRASE).map_err(|e| e.to_string())
-}
-
 fn read_passphrase() -> R<Option<String>> {
-    match passphrase_entry()?.get_password() {
-        Ok(p) => Ok(Some(p)),
-        Err(keyring::Error::NoEntry) => Ok(None),
-        Err(e) => Err(e.to_string()),
-    }
+    secret_store::get(KEYCHAIN_PASSPHRASE)
 }
 
 pub fn has_passphrase() -> R<bool> {
@@ -64,16 +113,11 @@ pub fn set_passphrase(passphrase: String) -> R<()> {
     if passphrase.is_empty() {
         return Err("Passphrase cannot be empty".to_string());
     }
-    passphrase_entry()?
-        .set_password(&passphrase)
-        .map_err(|e| e.to_string())
+    secret_store::set(KEYCHAIN_PASSPHRASE, &passphrase)
 }
 
 pub fn clear_passphrase() -> R<()> {
-    match passphrase_entry()?.delete_credential() {
-        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-        Err(e) => Err(e.to_string()),
-    }
+    secret_store::delete(KEYCHAIN_PASSPHRASE)
 }
 
 fn b64(bytes: &[u8]) -> String {
@@ -219,7 +263,7 @@ pub fn device_poll(device_code: String, interval: u64) -> R<Account> {
             .map_err(|e| e.to_string())?;
 
         if let Some(token) = resp.get("access_token").and_then(Value::as_str) {
-            entry()?.set_password(token).map_err(|e| e.to_string())?;
+            secret_store::set(KEYCHAIN_ACCOUNT, token)?;
             let login = fetch_login(token).ok();
             return Ok(Account { connected: true, login });
         }
@@ -262,10 +306,7 @@ pub fn account() -> R<Account> {
 }
 
 pub fn disconnect() -> R<()> {
-    match entry()?.delete_credential() {
-        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-        Err(e) => Err(e.to_string()),
-    }
+    secret_store::delete(KEYCHAIN_ACCOUNT)
 }
 
 // ── Gist read/write ──────────────────────────────────────────────────────────

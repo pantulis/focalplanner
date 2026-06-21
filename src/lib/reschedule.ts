@@ -14,7 +14,11 @@ export const TIMES_OF_DAY: TimeOfDay[] = [
   { id: "night", label: "Night", hour: 21 },
 ];
 
-export type WhenId = "tomorrow" | "weekend" | "workday";
+export type WhenId = "today" | "tomorrow" | "weekend" | "workday";
+
+/** The "Today" choice is offered conditionally (see rescheduleNode), so it's
+    kept out of the default list. */
+export const TODAY_WHEN: { id: WhenId; label: string } = { id: "today", label: "Today" };
 
 export const WHENS: { id: WhenId; label: string }[] = [
   { id: "tomorrow", label: "Tomorrow" },
@@ -39,7 +43,8 @@ function nextWorkday(from: Date): Date {
 /** Resolve a (when, hour) choice to a concrete Date. */
 export function rescheduleDate(when: WhenId, hour: number, from = new Date()): Date {
   let day: Date;
-  if (when === "tomorrow") day = addDays(startOfDay(from), 1);
+  if (when === "today") day = startOfDay(from);
+  else if (when === "tomorrow") day = addDays(startOfDay(from), 1);
   else if (when === "weekend") day = nextWeekendDay(from);
   else day = nextWorkday(from);
   day.setHours(hour, 0, 0, 0);
@@ -52,6 +57,6 @@ export function toLocalDateTime(d: Date): string {
 }
 
 /** Subdued day+hour hint for a reschedule choice, e.g. "Sat 09:00". */
-export function rescheduleHint(when: WhenId, hour: number): string {
-  return format(rescheduleDate(when, hour), "EEE HH:mm");
+export function rescheduleHint(when: WhenId, hour: number, from = new Date()): string {
+  return format(rescheduleDate(when, hour, from), "EEE HH:mm");
 }

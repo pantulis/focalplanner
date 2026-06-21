@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Check, Cloud, Loader2, Lock } from "lucide-react";
 import type { CalendarDto } from "@/lib/api";
@@ -22,6 +22,8 @@ import { Select } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
+export type Pane = "general" | "calendars" | "appearance" | "sync";
+
 interface Props {
   open: boolean;
   onClose: () => void;
@@ -31,9 +33,10 @@ interface Props {
   lists: CalendarDto[];
   sync: SyncController;
   onConnectClick: () => void;
+  /** Pane to show when the dialog is (re)opened. */
+  initialPane?: Pane;
 }
 
-type Pane = "general" | "calendars" | "appearance" | "sync";
 const PANES: { id: Pane; label: string }[] = [
   { id: "general", label: "General" },
   { id: "calendars", label: "Calendars" },
@@ -76,9 +79,15 @@ export function SettingsDialog({
   lists,
   sync,
   onConnectClick,
+  initialPane,
 }: Props) {
   const [pane, setPane] = useState<Pane>("general");
   const [passphrase, setPassphrase] = useState("");
+
+  // Jump to the requested pane each time the dialog opens.
+  useEffect(() => {
+    if (open) setPane(initialPane ?? "general");
+  }, [open, initialPane]);
 
   async function doPull(force: boolean) {
     if (force && !window.confirm("Replace local preferences with the synced copy?")) return;

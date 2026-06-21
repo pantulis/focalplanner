@@ -1,16 +1,26 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { addMinutes } from "date-fns";
+import { addMinutes, isSameDay, isToday, parseISO, startOfDay } from "date-fns";
 import { useQueryClient } from "@tanstack/react-query";
 import { listen } from "@tauri-apps/api/event";
 import { toast } from "sonner";
 import {
   Calendar as CalendarIcon,
+  CalendarCheck,
+  CalendarClock,
+  CalendarDays,
+  CalendarRange,
   CalendarX2,
+  CircleCheck,
   Clock,
   LayoutDashboard,
   ListTodo,
+  Moon,
   Pencil,
+  Sun,
+  Sunrise,
+  Sunset,
   Trash2,
+  type LucideIcon,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import type {
@@ -33,15 +43,18 @@ import {
   viewDays,
   viewLabel,
   viewRange,
+  clamp,
+  DAY_MINUTES,
+  HOUR_HEIGHT,
   type PlannerView,
 } from "@/lib/planner";
 import { AREAS, areaMembers, useAreaConfig } from "@/lib/areas";
 import {
   TIMES_OF_DAY,
-  WHENS,
   rescheduleDate,
   rescheduleHint,
   toLocalDateTime,
+  type WhenId,
 } from "@/lib/reschedule";
 import { useSettings } from "@/lib/settings";
 import { useSyncController } from "@/lib/sync";
@@ -54,7 +67,8 @@ import { ReminderList, type StatusFilter } from "@/components/ReminderList";
 import { EventInspector } from "@/components/EventInspector";
 import { ReminderInspector } from "@/components/ReminderInspector";
 import { AreasDialog } from "@/components/AreasDialog";
-import { SettingsDialog } from "@/components/SettingsDialog";
+import { SettingsDialog, type Pane as SettingsPane } from "@/components/SettingsDialog";
+import { ConfirmDialog, type ConfirmOptions } from "@/components/ConfirmDialog";
 import { GitHubConnectDialog } from "@/components/GitHubConnectDialog";
 import { AboutDialog } from "@/components/AboutDialog";
 
@@ -155,6 +169,11 @@ function Planner() {
   const [showReminders, setShowReminders] = useState(true);
   const [areasOpen, setAreasOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsPane, setSettingsPane] = useState<SettingsPane>("general");
+  const openSettings = (pane: SettingsPane = "general") => {
+    setSettingsPane(pane);
+    setSettingsOpen(true);
+  };
 
   const view: PlannerView = section === "weekly" ? "week" : "day";
   const weekStartsOn = settings.weekStartsOn;
@@ -275,6 +294,75 @@ function Planner() {
     );
   }
 
+  // ── Drag a reminder from the sidebar onto the planner to schedule it ──────
+  // Pointer-based (HTML5 drag-and-drop is unreliable in WKWebView). A floating
+  // ghost follows the cursor; the day column under the pointer is found via
+  // elementFromPoint + the `data-grid-day` attribute the grid renders.
+  const [remDrag, setRemDrag] = useState<{
+    reminder: ReminderDto;
+    x: number;
+    y: number;
+    over: number | null;
+    minute: number | null;
+  } | null>(null);
+
+  const REM_SNAP = 15; // snap drops to :00/:15/:30/:45 — mirrors TimeGridView
+
+  // Day index + snapped minute under a pointer, or null when not over the grid.
+  function dropAt(x: number, y: number): { dayIndex: number; minute: number } | null {
+    const el = document.elementFromPoint(x, y) as HTMLElement | null;
+    const col = el?.closest<HTMLElement>("[data-grid-day]");
+    if (!col) return null;
+    const dayIndex = Number(col.dataset.gridDay);
+    if (Number.isNaN(dayIndex) || !days[dayIndex]) return null;
+    const top = col.getBoundingClientRect().top;
+    const minute = clamp(
+      Math.round((((y - top) / HOUR_HEIGHT) * 60) / REM_SNAP) * REM_SNAP,
+      0,
+      DAY_MINUTES - REM_SNAP,
+    );
+    return { dayIndex, minute };
+  }
+
+  function startReminderDrag(e: React.PointerEvent, reminder: ReminderDto) {
+    if (e.button !== 0) return; // left button only
+    const startX = e.clientX;
+    const startY = e.clientY;
+    let active = false;
+
+    const onMove = (ev: PointerEvent) => {
+      if (!active) {
+        if (Math.hypot(ev.clientX - startX, ev.clientY - startY) < 5) return;
+        active = true;
+      }
+      const d = dropAt(ev.clientX, ev.clientY);
+      setRemDrag({
+        reminder,
+        x: ev.clientX,
+        y: ev.clientY,
+        over: d?.dayIndex ?? null,
+        minute: d?.minute ?? null,
+      });
+    };
+    const onUp = (ev: PointerEvent) => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      if (active) {
+        const d = dropAt(ev.clientX, ev.clientY);
+        if (d) {
+          const start = addMinutes(startOfDay(days[d.dayIndex]), d.minute);
+          updateReminderDue(reminder, toLocalDateTime(start));
+        }
+      }
+      setRemDrag(null);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  }
+
+  const fmtMinute = (m: number) =>
+    `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+
   // Filter by hidden calendars/lists (Settings) and the active Area of Focus.
   const filteredEvents = useMemo(() => {
     if (!effectiveEvents) return effectiveEvents;
@@ -308,14 +396,23 @@ function Planner() {
   const availableAreas = useMemo(() => {
     const calIds = new Set(visibleCalendars.map((c) => c.id));
     const listIds = new Set(visibleLists.map((c) => c.id));
+    const order = settings.areaOrder ?? [];
     return AREAS.filter((a) => {
       const m = areaMembers(areaConfig, a.id);
       return (
         m.calendarIds.some((id) => calIds.has(id)) ||
         m.listIds.some((id) => listIds.has(id))
       );
+    }).sort((a, b) => {
+      // Custom order first; unordered areas keep their predefined order.
+      const ia = order.indexOf(a.id);
+      const ib = order.indexOf(b.id);
+      if (ia === -1 && ib === -1) return 0;
+      if (ia === -1) return 1;
+      if (ib === -1) return -1;
+      return ia - ib;
     });
-  }, [areaConfig, visibleCalendars, visibleLists]);
+  }, [areaConfig, visibleCalendars, visibleLists, settings.areaOrder]);
 
   useEffect(() => {
     if (activeArea !== "all" && !availableAreas.some((a) => a.id === activeArea)) {
@@ -376,6 +473,7 @@ function Planner() {
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuNode[] } | null>(
     null,
   );
+  const [confirm, setConfirm] = useState<ConfirmOptions | null>(null);
 
   function eligible(items: CalendarDto[] | undefined, ids: string[]): CalendarDto[] {
     const editable = (items ?? []).filter((c) => c.editable);
@@ -431,8 +529,7 @@ function Planner() {
     );
   }
 
-  function rescheduleEvent(event: EventDto, whenId: string, hour: number) {
-    const dt = rescheduleDate(whenId as never, hour);
+  function rescheduleEvent(event: EventDto, dt: Date) {
     const dur = new Date(event.end).getTime() - new Date(event.start).getTime();
     updateEventTimes(
       event,
@@ -441,8 +538,8 @@ function Planner() {
     );
   }
 
-  function rescheduleReminder(reminder: ReminderDto, whenId: string, hour: number) {
-    updateReminderDue(reminder, toLocalDateTime(rescheduleDate(whenId as never, hour)));
+  function rescheduleReminder(reminder: ReminderDto, dt: Date) {
+    updateReminderDue(reminder, toLocalDateTime(dt));
   }
 
   /**
@@ -463,6 +560,7 @@ function Planner() {
         id: `${prefix}-current`,
         label: current.title ?? "Current",
         colorDot: current.color,
+        pill: "Current",
         disabled: true,
       });
     }
@@ -478,20 +576,49 @@ function Planner() {
     return nodes.length ? nodes : [{ id: "none", label: emptyLabel, disabled: true }];
   }
 
-  function rescheduleNode(onPick: (whenId: string, hour: number) => void): MenuNode {
+  // Reschedule relative to the day in focus (`anchor`). When that day isn't
+  // today, "Tomorrow" reads as "The following day" (and "Today" as "This day").
+  function rescheduleNode(
+    onPick: (dt: Date) => void,
+    base: Date,
+    includeToday = false,
+  ): MenuNode {
+    const baseIsToday = isToday(base);
+    const whens: { id: WhenId; label: string }[] = [
+      ...(includeToday
+        ? [{ id: "today" as WhenId, label: baseIsToday ? "Today" : "This day" }]
+        : []),
+      { id: "tomorrow", label: baseIsToday ? "Tomorrow" : "The following day" },
+      { id: "weekend", label: "Next weekend" },
+      { id: "workday", label: "Next workday" },
+    ];
+    const whenIcon: Record<string, LucideIcon> = {
+      today: CalendarCheck,
+      tomorrow: CalendarClock,
+      weekend: CalendarRange,
+      workday: CalendarDays,
+    };
+    const timeIcon: Record<string, LucideIcon> = {
+      morning: Sunrise,
+      afternoon: Sun,
+      evening: Sunset,
+      night: Moon,
+    };
     return {
       id: "reschedule",
       label: "Reschedule",
       icon: Clock,
       separatorBefore: true,
-      children: WHENS.map((w) => ({
+      children: whens.map((w) => ({
         id: w.id,
         label: w.label,
+        icon: whenIcon[w.id],
         children: TIMES_OF_DAY.map((t) => ({
           id: `${w.id}-${t.id}`,
           label: t.label,
-          hint: rescheduleHint(w.id, t.hour),
-          onSelect: () => onPick(w.id, t.hour),
+          icon: timeIcon[t.id],
+          hint: rescheduleHint(w.id, t.hour, base),
+          onSelect: () => onPick(rescheduleDate(w.id, t.hour, base)),
         })),
       })),
     };
@@ -517,14 +644,22 @@ function Planner() {
           (id) => moveEventToCalendar(event, id),
         ),
       },
-      rescheduleNode((w, h) => rescheduleEvent(event, w, h)),
+      rescheduleNode((dt) => rescheduleEvent(event, dt), anchor),
       {
         id: "delete",
         label: "Delete",
         icon: Trash2,
         danger: true,
         separatorBefore: true,
-        onSelect: () => event.id && deleteEvent(event.id),
+        onSelect: () =>
+          event.id &&
+          setConfirm({
+            title: "Delete event?",
+            description: `“${event.title}” will be removed from your calendar.`,
+            confirmLabel: "Delete",
+            destructive: true,
+            onConfirm: () => deleteEvent(event.id!),
+          }),
       },
     ];
   }
@@ -541,6 +676,20 @@ function Planner() {
         icon: Pencil,
         onSelect: () => openReminderEditor(reminder),
       },
+    ];
+    if (!reminder.completed && reminder.id) {
+      items.push({
+        id: "complete",
+        label: "Mark as completed",
+        icon: CircleCheck,
+        onSelect: () =>
+          reminderMx.toggle.mutate(
+            { id: reminder.id!, completed: true },
+            { onError: fail },
+          ),
+      });
+    }
+    items.push(
       {
         id: "move",
         label: "Move to List",
@@ -554,8 +703,12 @@ function Planner() {
           (id) => moveReminderToList(reminder, id),
         ),
       },
-      rescheduleNode((w, h) => rescheduleReminder(reminder, w, h)),
-    ];
+      rescheduleNode(
+        (dt) => rescheduleReminder(reminder, dt),
+        anchor,
+        !reminder.due || !isSameDay(parseISO(reminder.due), anchor),
+      ),
+    );
     if (reminder.due) {
       items.push({
         id: "clear-due",
@@ -570,7 +723,15 @@ function Planner() {
       icon: Trash2,
       danger: true,
       separatorBefore: true,
-      onSelect: () => reminder.id && deleteReminder(reminder.id),
+      onSelect: () =>
+        reminder.id &&
+        setConfirm({
+          title: "Delete reminder?",
+          description: `“${reminder.title}” will be permanently deleted.`,
+          confirmLabel: "Delete",
+          destructive: true,
+          onConfirm: () => deleteReminder(reminder.id!),
+        }),
     });
     return items;
   }
@@ -588,7 +749,7 @@ function Planner() {
   // Right-click an empty planner slot → create an event in an area calendar.
   function openEmptyEventMenu(e: React.MouseEvent, start: Date) {
     e.preventDefault();
-    const children: MenuNode[] = eligibleCalendars.length
+    const eventChildren: MenuNode[] = eligibleCalendars.length
       ? eligibleCalendars.map((c) => ({
           id: `new-cal-${c.id}`,
           label: c.title,
@@ -596,10 +757,27 @@ function Planner() {
           onSelect: () => openEventEditor(null, start, addMinutes(start, 60), c.id),
         }))
       : [{ id: "none", label: "No calendars in this area", disabled: true }];
+    const reminderChildren: MenuNode[] = eligibleLists.length
+      ? eligibleLists.map((c) => ({
+          id: `new-list-${c.id}`,
+          label: c.title,
+          colorDot: c.color,
+          onSelect: () => openReminderEditor(null, toLocalDateTime(start), c.id),
+        }))
+      : [{ id: "none", label: "No lists in this area", disabled: true }];
     setMenu({
       x: e.clientX,
       y: e.clientY,
-      items: [{ id: "create-event", label: "Create event in", icon: CalendarIcon, children }],
+      items: [
+        { id: "create-event", label: "Create event in", icon: CalendarIcon, children: eventChildren },
+        {
+          id: "create-reminder",
+          label: "Create reminder in",
+          icon: ListTodo,
+          separatorBefore: true,
+          children: reminderChildren,
+        },
+      ],
     });
   }
 
@@ -688,7 +866,7 @@ function Planner() {
       // Always available:
       if (e.key === ",") {
         e.preventDefault();
-        setSettingsOpen(true);
+        openSettings();
         return;
       }
       if (e.key === "r" || e.key === "R") {
@@ -769,8 +947,14 @@ function Planner() {
         activeArea={activeArea}
         onSelectArea={setActiveArea}
         onOpenAreas={() => setAreasOpen(true)}
-        onOpenSettings={() => setSettingsOpen(true)}
+        onOpenSettings={() => openSettings("general")}
+        onOpenSync={() => openSettings("sync")}
         sync={{ connected: sync.account.connected, syncing: sync.syncing, error: sync.error }}
+        anchor={anchor}
+        weekStartsOn={weekStartsOn}
+        weekView={section === "weekly"}
+        onSelectDay={(day) => setAnchor(day)}
+        onReorderAreas={(ids) => updateSettings({ areaOrder: ids })}
       />
 
       <main className="flex min-w-0 flex-1 flex-col">
@@ -810,10 +994,11 @@ function Planner() {
                 onUpdateReminderDue={updateReminderDue}
                 onEventContextMenu={openEventMenu}
                 onReminderContextMenu={openReminderMenu}
-                onDropReminder={(id, start) => {
-                  const r = (reminders.data ?? []).find((x) => x.id === id);
-                  if (r) updateReminderDue(r, toLocalDateTime(start));
-                }}
+                dropPreview={
+                  remDrag && remDrag.over != null && remDrag.minute != null
+                    ? { day: remDrag.over, minute: remDrag.minute }
+                    : null
+                }
                 workHours={{
                   workdayStart: settings.workdayStart,
                   workdayEnd: settings.workdayEnd,
@@ -840,6 +1025,7 @@ function Planner() {
               onDelete={deleteReminder}
               onContextMenu={openReminderMenu}
               onEmptyContextMenu={openEmptyReminderMenu}
+              onReminderDragStart={startReminderDrag}
             />
           )}
 
@@ -895,6 +1081,7 @@ function Planner() {
         calendars={calendars.data?.events ?? []}
         lists={calendars.data?.reminderLists ?? []}
         sync={sync}
+        initialPane={settingsPane}
         onConnectClick={() => {
           setSettingsOpen(false);
           setConnectOpen(true);
@@ -925,6 +1112,22 @@ function Planner() {
           items={menu.items}
           onClose={() => setMenu(null)}
         />
+      )}
+
+      <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />
+
+      {remDrag && (
+        <div
+          className="pointer-events-none fixed z-[100] flex max-w-[16rem] items-center gap-2 rounded-md border border-border bg-background px-2.5 py-1.5 text-sm shadow-lg"
+          style={{ left: remDrag.x + 12, top: remDrag.y + 12 }}
+        >
+          <span className="truncate">{remDrag.reminder.title}</span>
+          {remDrag.minute != null && (
+            <span className="shrink-0 font-medium text-primary">
+              {fmtMinute(remDrag.minute)}
+            </span>
+          )}
+        </div>
       )}
     </div>
   );

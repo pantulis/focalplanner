@@ -1,8 +1,10 @@
+import { useRef, useState } from "react";
 import {
   CalendarDays,
   CalendarRange,
   Cloud,
   CloudOff,
+  GripVertical,
   Layers,
   LayoutDashboard,
   Loader2,
@@ -13,6 +15,7 @@ import {
 } from "lucide-react";
 import type { Area } from "@/lib/areas";
 import { cn } from "@/lib/utils";
+import { SidebarCalendar } from "@/components/SidebarCalendar";
 
 export type Section = "today" | "weekly" | "planner";
 
@@ -30,7 +33,106 @@ interface Props {
   onSelectArea: (id: string) => void;
   onOpenAreas: () => void;
   onOpenSettings: () => void;
+  onOpenSync: () => void;
   sync: SyncStatus;
+  /** Mini-calendar state. */
+  anchor: Date;
+  weekStartsOn: 0 | 1;
+  weekView: boolean;
+  onSelectDay: (day: Date) => void;
+  /** New area order (area ids) after a drag-to-reorder. */
+  onReorderAreas: (ids: string[]) => void;
+}
+
+/** Drag-to-reorder list of areas (pointer-based; HTML5 DnD is flaky in WKWebView). */
+function SortableAreas({
+  areas,
+  activeArea,
+  onSelectArea,
+  onReorder,
+}: {
+  areas: Area[];
+  activeArea: string;
+  onSelectArea: (id: string) => void;
+  onReorder: (ids: string[]) => void;
+}) {
+  const listRef = useRef<HTMLDivElement>(null);
+  const [drag, setDrag] = useState<{ id: string; overIndex: number } | null>(null);
+
+  function indexForY(y: number): number {
+    const nodes = listRef.current?.querySelectorAll<HTMLElement>("[data-area-id]");
+    if (!nodes) return areas.length;
+    let i = 0;
+    for (const n of nodes) {
+      const r = n.getBoundingClientRect();
+      if (y < r.top + r.height / 2) return i;
+      i++;
+    }
+    return areas.length;
+  }
+
+  function startDrag(e: React.PointerEvent, area: Area) {
+    if (e.button !== 0) return;
+    const sx = e.clientX;
+    const sy = e.clientY;
+    let active = false;
+    const onMove = (ev: PointerEvent) => {
+      if (!active) {
+        if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < 5) return;
+        active = true;
+      }
+      setDrag({ id: area.id, overIndex: indexForY(ev.clientY) });
+    };
+    const onUp = (ev: PointerEvent) => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      if (!active) {
+        onSelectArea(area.id); // no movement → treat as a click
+      } else {
+        const to = indexForY(ev.clientY);
+        const ids = areas.map((a) => a.id);
+        const from = ids.indexOf(area.id);
+        const target = to > from ? to - 1 : to;
+        if (target !== from) {
+          ids.splice(from, 1);
+          ids.splice(target, 0, area.id);
+          onReorder(ids);
+        }
+      }
+      setDrag(null);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  }
+
+  return (
+    <div ref={listRef} className="space-y-0.5">
+      {areas.map((a, index) => (
+        <div key={a.id} data-area-id={a.id} className="relative">
+          {drag && drag.overIndex === index && (
+            <div className="absolute -top-px inset-x-1 z-10 h-0.5 rounded bg-primary" />
+          )}
+          <button
+            onPointerDown={(e) => startDrag(e, a)}
+            className={cn(
+              "group flex w-full select-none items-center gap-2 rounded-md px-2.5 py-1.5 text-sm transition-colors",
+              activeArea === a.id
+                ? "bg-accent font-medium text-foreground"
+                : "text-foreground/70 hover:bg-accent/60",
+              drag?.id === a.id && "opacity-40",
+            )}
+          >
+            <a.icon className="size-3.5 shrink-0" style={{ color: a.color }} />
+            <span className="truncate">{a.label}</span>
+            <GripVertical className="ml-auto size-3.5 shrink-0 cursor-grab text-muted-foreground opacity-0 transition-opacity group-hover:opacity-60" />
+          </button>
+        </div>
+      ))}
+      {drag && drag.overIndex === areas.length && (
+        <div className="mx-1 h-0.5 rounded bg-primary" />
+      )}
+    </div>
+  );
 }
 
 function SyncIndicator({ sync, onClick }: { sync: SyncStatus; onClick: () => void }) {
@@ -127,7 +229,13 @@ export function AppSidebar({
   onSelectArea,
   onOpenAreas,
   onOpenSettings,
+  onOpenSync,
   sync,
+  anchor,
+  weekStartsOn,
+  weekView,
+  onSelectDay,
+  onReorderAreas,
 }: Props) {
   return (
     <aside className="flex h-full w-56 shrink-0 flex-col border-r border-border bg-sidebar px-2.5 pb-4 text-sidebar-foreground">
@@ -178,17 +286,13 @@ export function AppSidebar({
         </button>
       </div>
 
-      <div className="mt-1 space-y-0.5 pl-2">
-        {areas.map((a) => (
-          <AreaItem
-            key={a.id}
-            active={activeArea === a.id}
-            label={a.label}
-            icon={a.icon}
-            color={a.color}
-            onClick={() => onSelectArea(a.id)}
-          />
-        ))}
+      <div className="mt-1 min-h-0 flex-1 space-y-0.5 overflow-y-auto pl-2">
+        <SortableAreas
+          areas={areas}
+          activeArea={activeArea}
+          onSelectArea={onSelectArea}
+          onReorder={onReorderAreas}
+        />
         {areas.length === 0 && (
           <button
             onClick={onOpenAreas}
@@ -205,7 +309,17 @@ export function AppSidebar({
         />
       </div>
 
-      <div className="mt-auto flex items-center gap-1 pt-3">
+      {/* Fixed mini-calendar between Areas of Focus and Settings. */}
+      <div className="mt-2 shrink-0 border-t border-border pt-2">
+        <SidebarCalendar
+          anchor={anchor}
+          weekStartsOn={weekStartsOn}
+          weekView={weekView}
+          onSelectDay={onSelectDay}
+        />
+      </div>
+
+      <div className="flex shrink-0 items-center gap-1 pt-2">
         <div className="min-w-0 flex-1">
           <NavButton
             active={false}
@@ -214,7 +328,7 @@ export function AppSidebar({
             onClick={onOpenSettings}
           />
         </div>
-        <SyncIndicator sync={sync} onClick={onOpenSettings} />
+        <SyncIndicator sync={sync} onClick={onOpenSync} />
       </div>
     </aside>
   );

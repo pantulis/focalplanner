@@ -15,6 +15,8 @@ export interface Settings {
   theme: string;
   font: string;
   scale: number;
+  /** Custom order of areas of focus in the sidebar (area ids). */
+  areaOrder: string[];
   /** GitHub sync bookkeeping (not secret; the token lives in the Keychain). */
   syncGistId?: string;
   syncUpdatedAt?: string;
@@ -33,6 +35,7 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: "light",
   font: "system",
   scale: 1,
+  areaOrder: [],
   autoSync: true,
 };
 
@@ -45,18 +48,20 @@ export interface ThemeOption {
 }
 
 export const THEMES: ThemeOption[] = [
+  // Light
   { id: "light", label: "Light", dark: false, swatch: ["#ffffff", "#343434", "#f2f2f2"] },
+  { id: "macos", label: "macOS", dark: false, swatch: ["#f5f5f7", "#007aff", "#e3e3e8"] },
+  { id: "github-light", label: "GitHub Light", dark: false, swatch: ["#ffffff", "#0969da", "#eaeef2"] },
+  { id: "catppuccin-latte", label: "Catppuccin Latte", dark: false, swatch: ["#eff1f5", "#8839ef", "#ccd0da"] },
+  { id: "solarized", label: "Solarized Light", dark: false, swatch: ["#fdf6e3", "#268bd2", "#eee8d5"] },
+  { id: "gruvbox-light", label: "Gruvbox Light", dark: false, swatch: ["#fbf1c7", "#b57614", "#ebdbb2"] },
+  // Dark
   { id: "dark", label: "Dark", dark: true, swatch: ["#252525", "#ededed", "#444444"] },
   { id: "nord", label: "Nord", dark: true, swatch: ["#2e3440", "#88c0d0", "#4c566a"] },
-  { id: "catppuccin", label: "Catppuccin", dark: true, swatch: ["#1e1e2e", "#cba6f7", "#585b70"] },
-  { id: "rose-pine", label: "Rosé Pine", dark: true, swatch: ["#191724", "#c4a7e7", "#403d52"] },
-  { id: "solarized", label: "Solarized", dark: false, swatch: ["#fdf6e3", "#268bd2", "#eee8d5"] },
-  { id: "solarized-dark", label: "Solarized Dark", dark: true, swatch: ["#002b36", "#268bd2", "#073642"] },
-  { id: "gruvbox", label: "Gruvbox", dark: true, swatch: ["#282828", "#fabd2f", "#504945"] },
   { id: "dracula", label: "Dracula", dark: true, swatch: ["#282a36", "#bd93f9", "#44475a"] },
   { id: "tokyo-night", label: "Tokyo Night", dark: true, swatch: ["#1a1b26", "#7aa2f7", "#414868"] },
-  { id: "one-dark", label: "One Dark", dark: true, swatch: ["#282c34", "#61afef", "#3e4451"] },
-  { id: "everforest", label: "Everforest", dark: true, swatch: ["#2d353b", "#a7c080", "#475258"] },
+  { id: "catppuccin", label: "Catppuccin Mocha", dark: true, swatch: ["#1e1e2e", "#cba6f7", "#585b70"] },
+  { id: "gruvbox", label: "Gruvbox", dark: true, swatch: ["#282828", "#fabd2f", "#504945"] },
 ];
 
 export interface FontOption {
@@ -71,20 +76,23 @@ export const FONTS: FontOption[] = [
     label: "System",
     stack: '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif',
   },
+  { id: "inter", label: "Inter", stack: '"Inter Variable", system-ui, sans-serif' },
+  { id: "roboto", label: "Roboto", stack: '"Roboto Flex Variable", system-ui, sans-serif' },
+  { id: "open-sans", label: "Open Sans", stack: '"Open Sans Variable", system-ui, sans-serif' },
   {
-    id: "rounded",
-    label: "Rounded",
-    stack: 'ui-rounded, "SF Pro Rounded", "Hiragino Maru Gothic ProN", system-ui, sans-serif',
+    id: "nunito",
+    label: "Nunito",
+    stack: '"Nunito Variable", ui-rounded, system-ui, sans-serif',
   },
   {
-    id: "serif",
-    label: "Serif",
-    stack: '"Iowan Old Style", Georgia, "Times New Roman", serif',
+    id: "source-serif",
+    label: "Source Serif",
+    stack: '"Source Serif 4 Variable", Georgia, "Times New Roman", serif',
   },
   {
-    id: "mono",
-    label: "Mono",
-    stack: 'ui-monospace, "SF Mono", Menlo, Consolas, monospace',
+    id: "jetbrains-mono",
+    label: "JetBrains Mono",
+    stack: '"JetBrains Mono Variable", ui-monospace, Menlo, monospace',
   },
 ];
 

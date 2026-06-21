@@ -102,31 +102,6 @@
   --sidebar-foreground: #cdd6f4;
 }
 
-/* Rosé Pine */
-[data-theme="rose-pine"] {
-  --background: #191724;
-  --foreground: #e0def4;
-  --card: #1f1d2e;
-  --card-foreground: #e0def4;
-  --popover: #1f1d2e;
-  --popover-foreground: #e0def4;
-  --primary: #c4a7e7;
-  --primary-foreground: #191724;
-  --secondary: #26233a;
-  --secondary-foreground: #e0def4;
-  --muted: #1f1d2e;
-  --muted-foreground: #908caa;
-  --accent: #403d52;
-  --accent-foreground: #e0def4;
-  --destructive: #eb6f92;
-  --destructive-foreground: #191724;
-  --border: #403d52;
-  --input: #524f67;
-  --ring: #c4a7e7;
-  --sidebar: #1f1d2e;
-  --sidebar-foreground: #e0def4;
-}
-
 /* Solarized Light */
 [data-theme="solarized"] {
   --background: #fdf6e3;
@@ -150,31 +125,6 @@
   --ring: #268bd2;
   --sidebar: #eee8d5;
   --sidebar-foreground: #586e75;
-}
-
-/* Solarized Dark */
-[data-theme="solarized-dark"] {
-  --background: #002b36;
-  --foreground: #93a1a1;
-  --card: #073642;
-  --card-foreground: #eee8d5;
-  --popover: #073642;
-  --popover-foreground: #eee8d5;
-  --primary: #268bd2;
-  --primary-foreground: #002b36;
-  --secondary: #073642;
-  --secondary-foreground: #eee8d5;
-  --muted: #073642;
-  --muted-foreground: #657b83;
-  --accent: #094a59;
-  --accent-foreground: #eee8d5;
-  --destructive: #dc322f;
-  --destructive-foreground: #fdf6e3;
-  --border: #0a4150;
-  --input: #094a59;
-  --ring: #268bd2;
-  --sidebar: #00212b;
-  --sidebar-foreground: #93a1a1;
 }
 
 /* Gruvbox Dark */
@@ -252,54 +202,104 @@
   --sidebar-foreground: #c0caf5;
 }
 
-/* One Dark */
-[data-theme="one-dark"] {
-  --background: #282c34;
-  --foreground: #abb2bf;
-  --card: #2f343f;
-  --card-foreground: #abb2bf;
-  --popover: #2f343f;
-  --popover-foreground: #abb2bf;
-  --primary: #61afef;
-  --primary-foreground: #282c34;
-  --secondary: #3e4451;
-  --secondary-foreground: #abb2bf;
-  --muted: #2f343f;
-  --muted-foreground: #828997;
-  --accent: #3e4451;
-  --accent-foreground: #abb2bf;
-  --destructive: #e06c75;
-  --destructive-foreground: #282c34;
-  --border: #3e4451;
-  --input: #4b5263;
-  --ring: #61afef;
-  --sidebar: #21252b;
-  --sidebar-foreground: #abb2bf;
+/* macOS (light) */
+[data-theme="macos"] {
+  --background: #ffffff;
+  --foreground: #1d1d1f;
+  --card: #ffffff;
+  --card-foreground: #1d1d1f;
+  --popover: #ffffff;
+  --popover-foreground: #1d1d1f;
+  --primary: #007aff;
+  --primary-foreground: #ffffff;
+  --secondary: #f5f5f7;
+  --secondary-foreground: #1d1d1f;
+  --muted: #f5f5f7;
+  --muted-foreground: #6e6e73;
+  --accent: #e8e8ed;
+  --accent-foreground: #1d1d1f;
+  --destructive: #ff3b30;
+  --destructive-foreground: #ffffff;
+  --border: #d2d2d7;
+  --input: #d2d2d7;
+  --ring: #007aff;
+  --sidebar: #f5f5f7;
+  --sidebar-foreground: #1d1d1f;
 }
 
-/* Everforest Dark */
-[data-theme="everforest"] {
-  --background: #2d353b;
-  --foreground: #d3c6aa;
-  --card: #343f44;
-  --card-foreground: #d3c6aa;
-  --popover: #343f44;
-  --popover-foreground: #d3c6aa;
-  --primary: #a7c080;
-  --primary-foreground: #2d353b;
-  --secondary: #475258;
-  --secondary-foreground: #d3c6aa;
-  --muted: #343f44;
-  --muted-foreground: #9da9a0;
-  --accent: #475258;
-  --accent-foreground: #d3c6aa;
-  --destructive: #e67e80;
-  --destructive-foreground: #2d353b;
-  --border: #475258;
-  --input: #4f585e;
-  --ring: #a7c080;
-  --sidebar: #272e33;
-  --sidebar-foreground: #d3c6aa;
+/* GitHub Light */
+[data-theme="github-light"] {
+  --background: #ffffff;
+  --foreground: #1f2328;
+  --card: #ffffff;
+  --card-foreground: #1f2328;
+  --popover: #ffffff;
+  --popover-foreground: #1f2328;
+  --primary: #0969da;
+  --primary-foreground: #ffffff;
+  --secondary: #f6f8fa;
+  --secondary-foreground: #1f2328;
+  --muted: #f6f8fa;
+  --muted-foreground: #636c76;
+  --accent: #eaeef2;
+  --accent-foreground: #1f2328;
+  --destructive: #cf222e;
+  --destructive-foreground: #ffffff;
+  --border: #d0d7de;
+  --input: #d0d7de;
+  --ring: #0969da;
+  --sidebar: #f6f8fa;
+  --sidebar-foreground: #1f2328;
+}
+
+/* Catppuccin Latte (light) */
+[data-theme="catppuccin-latte"] {
+  --background: #eff1f5;
+  --foreground: #4c4f69;
+  --card: #ffffff;
+  --card-foreground: #4c4f69;
+  --popover: #ffffff;
+  --popover-foreground: #4c4f69;
+  --primary: #8839ef;
+  --primary-foreground: #eff1f5;
+  --secondary: #e6e9ef;
+  --secondary-foreground: #4c4f69;
+  --muted: #e6e9ef;
+  --muted-foreground: #6c6f85;
+  --accent: #dce0e8;
+  --accent-foreground: #4c4f69;
+  --destructive: #d20f39;
+  --destructive-foreground: #eff1f5;
+  --border: #ccd0da;
+  --input: #ccd0da;
+  --ring: #8839ef;
+  --sidebar: #e6e9ef;
+  --sidebar-foreground: #4c4f69;
+}
+
+/* Gruvbox Light */
+[data-theme="gruvbox-light"] {
+  --background: #fbf1c7;
+  --foreground: #3c3836;
+  --card: #f9f5d7;
+  --card-foreground: #3c3836;
+  --popover: #f9f5d7;
+  --popover-foreground: #3c3836;
+  --primary: #b57614;
+  --primary-foreground: #fbf1c7;
+  --secondary: #ebdbb2;
+  --secondary-foreground: #3c3836;
+  --muted: #ebdbb2;
+  --muted-foreground: #7c6f64;
+  --accent: #ebdbb2;
+  --accent-foreground: #3c3836;
+  --destructive: #cc241d;
+  --destructive-foreground: #fbf1c7;
+  --border: #d5c4a1;
+  --input: #d5c4a1;
+  --ring: #b57614;
+  --sidebar: #f2e5bc;
+  --sidebar-foreground: #3c3836;
 }
 
 @theme inline {
@@ -397,4 +397,82 @@
 }
 .fp-calendar .rdp-caption_label {
   font-weight: 600;
+}
+
+/* Compact sidebar mini-calendar. */
+.fp-mini-wrap {
+  display: flex;
+  flex-direction: column;
+}
+.fp-mini-calendar {
+  --rdp-accent-color: var(--primary);
+  --rdp-today-color: var(--primary);
+  --rdp-day_button-width: 1.75rem;
+  --rdp-day_button-height: 1.75rem;
+  --rdp-day-width: 1.75rem;
+  --rdp-day-height: 1.75rem;
+  --rdp-day_button-border-radius: 9999px;
+  --rdp-selected-border: none;
+  --rdp-nav-height: 1.75rem;
+  --rdp-nav_button-height: 1.5rem;
+  --rdp-nav_button-width: 1.5rem;
+  --rdp-weekday-padding: 0.125rem 0;
+  --rdp-weekday-opacity: 1;
+  --rdp-outside-opacity: 0.3;
+  --rdp-months-gap: 0;
+  margin: 0 auto;
+  font-size: 0.75rem;
+}
+/* Month name centered between the chevrons, chevrons pinned to the edges. */
+.fp-mini-calendar .rdp-month_caption {
+  justify-content: center;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  height: var(--rdp-nav-height);
+}
+.fp-mini-calendar .rdp-nav {
+  width: 100%;
+  justify-content: space-between;
+  padding: 0;
+}
+.fp-mini-calendar .rdp-weekday {
+  color: var(--muted-foreground);
+  font-weight: 500;
+}
+.fp-mini-calendar .rdp-chevron {
+  fill: var(--muted-foreground);
+  width: 0.875rem;
+  height: 0.875rem;
+  opacity: 0.7;
+}
+.fp-mini-calendar .rdp-button_previous:hover .rdp-chevron,
+.fp-mini-calendar .rdp-button_next:hover .rdp-chevron {
+  fill: var(--foreground);
+  opacity: 1;
+}
+.fp-mini-calendar .rdp-outside {
+  opacity: var(--rdp-outside-opacity);
+}
+.fp-mini-calendar .rdp-day_button:hover {
+  background-color: var(--accent);
+}
+/* Active day (daily view) — filled primary circle. */
+.fp-mini-calendar .fp-mini-day .rdp-day_button {
+  background-color: var(--primary);
+  color: var(--primary-foreground);
+}
+/* Active week (weekly view) — continuous tinted band across the row. */
+.fp-mini-calendar .fp-mini-week {
+  background-color: color-mix(in srgb, var(--primary) 24%, transparent);
+}
+.fp-mini-calendar .rdp-week .fp-mini-week:first-child {
+  border-top-left-radius: var(--radius);
+  border-bottom-left-radius: var(--radius);
+}
+.fp-mini-calendar .rdp-week .fp-mini-week:last-child {
+  border-top-right-radius: var(--radius);
+  border-bottom-right-radius: var(--radius);
+}
+.fp-mini-calendar .fp-mini-week .rdp-day_button:hover {
+  background-color: color-mix(in srgb, var(--primary) 32%, transparent);
 }

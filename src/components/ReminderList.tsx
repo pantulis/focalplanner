@@ -33,6 +33,8 @@ interface Props {
   onDelete: (id: string) => void;
   onContextMenu: (e: React.MouseEvent, reminder: ReminderDto) => void;
   onEmptyContextMenu: (e: React.MouseEvent) => void;
+  /** Begin a pointer-based drag of a reminder onto the planner to schedule it. */
+  onReminderDragStart: (e: React.PointerEvent, reminder: ReminderDto) => void;
 }
 
 function dueStartOfDay(due: string): number | null {
@@ -66,6 +68,7 @@ export function ReminderList({
   onDelete,
   onContextMenu,
   onEmptyContextMenu,
+  onReminderDragStart,
 }: Props) {
   const groupFilter = listFilter;
 
@@ -154,16 +157,12 @@ export function ReminderList({
                 animate={POOF_ANIMATE}
                 exit={POOF_EXIT}
                 transition={POOF_TRANSITION}
-                draggable={!!r.id}
-                onDragStartCapture={(e) => {
-                  e.dataTransfer.setData("text/plain", r.id ?? "");
-                  e.dataTransfer.effectAllowed = "move";
-                }}
+                onPointerDown={(e) => r.id && onReminderDragStart(e, r)}
                 onContextMenu={(e) => {
                   e.stopPropagation();
                   onContextMenu(e, r);
                 }}
-                className="group flex items-start gap-2.5 rounded-md px-2 py-2 hover:bg-accent"
+                className="group flex select-none items-start gap-2.5 rounded-md px-2 py-2 hover:bg-accent"
                 title="Drag onto the planner to schedule"
               >
                 <Checkbox
