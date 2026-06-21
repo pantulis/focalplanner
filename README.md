@@ -46,7 +46,7 @@ approval is affected.
 - Full **CRUD** for both events and reminders (create, edit, complete, delete).
 - Native data: reads/writes the same store as Apple Calendar & Reminders.
 
-## Screenshots
+## We are all here for the screenshots, aren't we?
 
 |  |  |
 | :---: | :---: |
