@@ -95,10 +95,22 @@ export interface AboutInfo {
   buildEpochMs: number;
 }
 
+export interface TrayItemDto {
+  kind: "event" | "reminder";
+  id: string;
+  label: string;
+}
+
 export const api = {
   startChangeObserver: () => invoke<void>("start_change_observer"),
   aboutInfo: () => invoke<AboutInfo>("about_info"),
   openPrivacySettings: () => invoke<void>("open_privacy_settings"),
+
+  // Menubar tray
+  trayUpdate: (title: string | null, items: TrayItemDto[]) =>
+    invoke<void>("tray_update", { title, items }),
+  traySetTitle: (title: string | null) => invoke<void>("tray_set_title", { title }),
+  traySetEnabled: (enabled: boolean) => invoke<void>("tray_set_enabled", { enabled }),
 
   // GitHub preference sync
   githubDeviceStart: () => invoke<DeviceStart>("github_device_start"),

@@ -1,11 +1,14 @@
-//! Synchronous EventKit access layer.
+//! EventKit access layer.
 //!
-//! Every function here creates a short-lived [`EKEventStore`] and performs its
-//! work synchronously. The store is `!Send`, so these functions must only be
-//! called from a blocking context (see `commands.rs`, which wraps them in
-//! `tauri::async_runtime::spawn_blocking`). Authorization is granted at the
-//! system (TCC) level and persists across stores, so creating a fresh store
-//! per call is correct.
+//! `EKEventStore` is `!Send`, and freshly-created stores can transiently return
+//! empty results while EventKit reloads after a change. So instead of a new store
+//! per call, all work runs on a single long-lived, access-granted store owned by
+//! one dedicated thread (`with_store`). This both keeps the store warm/consistent
+//! and serializes every operation, so a read never races a write.
+
+use std::sync::mpsc::{channel, Sender};
+use std::sync::OnceLock;
+use std::thread;
 
 use eventkit::prelude::*;
 
@@ -15,8 +18,56 @@ use crate::models::{
 
 type EkResult<T> = Result<T, EventKitError>;
 
-fn store() -> EkResult<EKEventStore> {
-    EKEventStore::new()
+type Job = Box<dyn FnOnce(&EKEventStore) + Send>;
+
+static WORKER: OnceLock<Sender<Job>> = OnceLock::new();
+
+/// The dedicated EventKit thread, lazily started. Owns the one persistent store.
+fn worker() -> &'static Sender<Job> {
+    WORKER.get_or_init(|| {
+        let (tx, rx) = channel::<Job>();
+        thread::Builder::new()
+            .name("eventkit".into())
+            .spawn(move || {
+                let store = match EKEventStore::new() {
+                    Ok(s) => s,
+                    Err(e) => {
+                        eprintln!("[eventkit] failed to create store: {e}");
+                        return;
+                    }
+                };
+                // Request the (already-granted at the TCC level) access so the
+                // store fully loads its data before serving queries.
+                let _ = store.request_full_access_to_events();
+                let _ = store.request_full_access_to_reminders();
+                while let Ok(job) = rx.recv() {
+                    job(&store);
+                }
+            })
+            .expect("spawn eventkit thread");
+        tx
+    })
+}
+
+/// Run a closure on the persistent EventKit store thread and return its result.
+fn with_store<T, F>(f: F) -> EkResult<T>
+where
+    F: FnOnce(&EKEventStore) -> EkResult<T> + Send + 'static,
+    T: Send + 'static,
+{
+    let (rtx, rrx) = channel();
+    if worker()
+        .send(Box::new(move |store| {
+            let _ = rtx.send(f(store));
+        }))
+        .is_err()
+    {
+        return Err(EventKitError::OperationFailed(
+            "EventKit worker unavailable".into(),
+        ));
+    }
+    rrx.recv()
+        .map_err(|_| EventKitError::OperationFailed("EventKit worker dropped".into()))?
 }
 
 fn not_found(what: &str) -> EventKitError {
@@ -47,10 +98,12 @@ pub fn access_status() -> EkResult<AccessStatus> {
 
 /// Prompt for full access to both entity types, then report the resulting status.
 pub fn request_access() -> EkResult<AccessStatus> {
-    let store = store()?;
-    // Ignore the boolean/errors here; the authoritative answer is the status below.
-    let _ = store.request_full_access_to_events();
-    let _ = store.request_full_access_to_reminders();
+    with_store(|store| {
+        // Ignore the boolean/errors here; the authoritative answer is the status below.
+        let _ = store.request_full_access_to_events();
+        let _ = store.request_full_access_to_reminders();
+        Ok(())
+    })?;
     access_status()
 }
 
@@ -67,20 +120,21 @@ fn calendar_to_dto(c: &EKCalendar) -> CalendarDto {
 }
 
 pub fn list_calendars() -> EkResult<CalendarSets> {
-    let store = store()?;
-    let events = store
-        .calendars_for_entity_type(EKEntityType::Event)?
-        .iter()
-        .map(calendar_to_dto)
-        .collect();
-    let reminder_lists = store
-        .calendars_for_entity_type(EKEntityType::Reminder)?
-        .iter()
-        .map(calendar_to_dto)
-        .collect();
-    Ok(CalendarSets {
-        events,
-        reminder_lists,
+    with_store(|store| {
+        let events = store
+            .calendars_for_entity_type(EKEntityType::Event)?
+            .iter()
+            .map(calendar_to_dto)
+            .collect();
+        let reminder_lists = store
+            .calendars_for_entity_type(EKEntityType::Reminder)?
+            .iter()
+            .map(calendar_to_dto)
+            .collect();
+        Ok(CalendarSets {
+            events,
+            reminder_lists,
+        })
     })
 }
 
@@ -115,18 +169,21 @@ pub fn fetch_events(
     end: String,
     calendar_ids: Option<Vec<String>>,
 ) -> EkResult<Vec<EventDto>> {
-    let store = store()?;
-    let predicate = match calendar_ids {
-        Some(ids) if !ids.is_empty() => EKEventPredicate::new(start, end).with_calendar_identifiers(ids),
-        _ => EKEventPredicate::new(start, end),
-    };
-    let mut events: Vec<EventDto> = store
-        .events_matching(&predicate)?
-        .into_iter()
-        .map(event_to_dto)
-        .collect();
-    events.sort_by(|a, b| a.start.cmp(&b.start));
-    Ok(events)
+    with_store(move |store| {
+        let predicate = match calendar_ids {
+            Some(ids) if !ids.is_empty() => {
+                EKEventPredicate::new(start, end).with_calendar_identifiers(ids)
+            }
+            _ => EKEventPredicate::new(start, end),
+        };
+        let mut events: Vec<EventDto> = store
+            .events_matching(&predicate)?
+            .into_iter()
+            .map(event_to_dto)
+            .collect();
+        events.sort_by(|a, b| a.start.cmp(&b.start));
+        Ok(events)
+    })
 }
 
 fn default_event_calendar(store: &EKEventStore) -> Option<String> {
@@ -138,39 +195,42 @@ fn default_event_calendar(store: &EKEventStore) -> Option<String> {
 }
 
 pub fn create_event(input: EventInput) -> EkResult<()> {
-    let store = store()?;
-    let mut event = EKEvent::new(input.title, input.start, input.end);
-    event.all_day = input.all_day;
-    event.notes = input.notes;
-    event.location = input.location;
-    event.calendar_identifier = input.calendar_id.or_else(|| default_event_calendar(&store));
-    store.save_event(&event, EKSpan::ThisEvent, true)
+    with_store(move |store| {
+        let mut event = EKEvent::new(input.title, input.start, input.end);
+        event.all_day = input.all_day;
+        event.notes = input.notes;
+        event.location = input.location;
+        event.calendar_identifier = input.calendar_id.or_else(|| default_event_calendar(store));
+        store.save_event(&event, EKSpan::ThisEvent, true)
+    })
 }
 
 pub fn update_event(input: EventInput) -> EkResult<()> {
-    let id = input.id.clone().ok_or_else(|| not_found("event id"))?;
-    let store = store()?;
-    let mut event = store
-        .event_with_identifier(&id)?
-        .ok_or_else(|| not_found("event"))?;
-    event.title = input.title;
-    event.start_date = input.start;
-    event.end_date = input.end;
-    event.all_day = input.all_day;
-    event.notes = input.notes;
-    event.location = input.location;
-    if let Some(cal) = input.calendar_id {
-        event.calendar_identifier = Some(cal);
-    }
-    store.save_event(&event, EKSpan::ThisEvent, true)
+    with_store(move |store| {
+        let id = input.id.clone().ok_or_else(|| not_found("event id"))?;
+        let mut event = store
+            .event_with_identifier(&id)?
+            .ok_or_else(|| not_found("event"))?;
+        event.title = input.title;
+        event.start_date = input.start;
+        event.end_date = input.end;
+        event.all_day = input.all_day;
+        event.notes = input.notes;
+        event.location = input.location;
+        if let Some(cal) = input.calendar_id {
+            event.calendar_identifier = Some(cal);
+        }
+        store.save_event(&event, EKSpan::ThisEvent, true)
+    })
 }
 
 pub fn delete_event(id: String) -> EkResult<()> {
-    let store = store()?;
-    let event = store
-        .event_with_identifier(&id)?
-        .ok_or_else(|| not_found("event"))?;
-    store.remove_event(&event, EKSpan::ThisEvent, true)
+    with_store(move |store| {
+        let event = store
+            .event_with_identifier(&id)?
+            .ok_or_else(|| not_found("event"))?;
+        store.remove_event(&event, EKSpan::ThisEvent, true)
+    })
 }
 
 // ── Reminders ─────────────────────────────────────────────────────────────
@@ -235,22 +295,23 @@ pub fn fetch_reminders(
     list_ids: Option<Vec<String>>,
     include_completed: bool,
 ) -> EkResult<Vec<ReminderDto>> {
-    let store = store()?;
-    let mut predicate = if include_completed {
-        EKReminderPredicate::new()
-    } else {
-        EKReminderPredicate::incomplete()
-    };
-    if let Some(ids) = list_ids {
-        if !ids.is_empty() {
-            predicate = predicate.with_calendar_identifiers(ids);
+    with_store(move |store| {
+        let mut predicate = if include_completed {
+            EKReminderPredicate::new()
+        } else {
+            EKReminderPredicate::incomplete()
+        };
+        if let Some(ids) = list_ids {
+            if !ids.is_empty() {
+                predicate = predicate.with_calendar_identifiers(ids);
+            }
         }
-    }
-    Ok(store
-        .fetch_reminders_matching(&predicate)?
-        .into_iter()
-        .map(reminder_to_dto)
-        .collect())
+        Ok(store
+            .fetch_reminders_matching(&predicate)?
+            .into_iter()
+            .map(reminder_to_dto)
+            .collect())
+    })
 }
 
 fn default_reminder_list(store: &EKEventStore) -> Option<String> {
@@ -262,13 +323,14 @@ fn default_reminder_list(store: &EKEventStore) -> Option<String> {
 }
 
 pub fn create_reminder(input: ReminderInput) -> EkResult<()> {
-    let store = store()?;
-    let mut reminder = EKReminder::new(input.title);
-    reminder.priority = input.priority;
-    reminder.notes = input.notes;
-    reminder.due_date_components = input.due.as_deref().map(parse_due);
-    reminder.calendar_identifier = input.list_id.or_else(|| default_reminder_list(&store));
-    store.save_reminder(&reminder, true)
+    with_store(move |store| {
+        let mut reminder = EKReminder::new(input.title);
+        reminder.priority = input.priority;
+        reminder.notes = input.notes;
+        reminder.due_date_components = input.due.as_deref().map(parse_due);
+        reminder.calendar_identifier = input.list_id.or_else(|| default_reminder_list(store));
+        store.save_reminder(&reminder, true)
+    })
 }
 
 fn load_reminder(store: &EKEventStore, id: &str) -> EkResult<EKReminder> {
@@ -281,28 +343,31 @@ fn load_reminder(store: &EKEventStore, id: &str) -> EkResult<EKReminder> {
 }
 
 pub fn update_reminder(input: ReminderInput) -> EkResult<()> {
-    let id = input.id.clone().ok_or_else(|| not_found("reminder id"))?;
-    let store = store()?;
-    let mut reminder = load_reminder(&store, &id)?;
-    reminder.title = input.title;
-    reminder.priority = input.priority;
-    reminder.notes = input.notes;
-    reminder.due_date_components = input.due.as_deref().map(parse_due);
-    if let Some(list) = input.list_id {
-        reminder.calendar_identifier = Some(list);
-    }
-    store.save_reminder(&reminder, true)
+    with_store(move |store| {
+        let id = input.id.clone().ok_or_else(|| not_found("reminder id"))?;
+        let mut reminder = load_reminder(store, &id)?;
+        reminder.title = input.title;
+        reminder.priority = input.priority;
+        reminder.notes = input.notes;
+        reminder.due_date_components = input.due.as_deref().map(parse_due);
+        if let Some(list) = input.list_id {
+            reminder.calendar_identifier = Some(list);
+        }
+        store.save_reminder(&reminder, true)
+    })
 }
 
 pub fn set_reminder_completed(id: String, completed: bool) -> EkResult<()> {
-    let store = store()?;
-    let mut reminder = load_reminder(&store, &id)?;
-    reminder.is_completed = completed;
-    store.save_reminder(&reminder, true)
+    with_store(move |store| {
+        let mut reminder = load_reminder(store, &id)?;
+        reminder.is_completed = completed;
+        store.save_reminder(&reminder, true)
+    })
 }
 
 pub fn delete_reminder(id: String) -> EkResult<()> {
-    let store = store()?;
-    let reminder = load_reminder(&store, &id)?;
-    store.remove_reminder(&reminder, true)
+    with_store(move |store| {
+        let reminder = load_reminder(store, &id)?;
+        store.remove_reminder(&reminder, true)
+    })
 }

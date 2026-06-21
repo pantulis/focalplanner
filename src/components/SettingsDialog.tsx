@@ -161,6 +161,14 @@ export function SettingsDialog({
                 Show completed reminders
               </label>
 
+              <label className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  checked={settings.menubarEnabled}
+                  onCheckedChange={(c) => onChange({ menubarEnabled: c })}
+                />
+                Show current event &amp; today's agenda in the menu bar
+              </label>
+
               <div className="space-y-1.5">
                 <Label>Week begins on</Label>
                 <Select

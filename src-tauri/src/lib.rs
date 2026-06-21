@@ -2,6 +2,7 @@ mod commands;
 mod eventkit_service;
 mod github_sync;
 mod models;
+mod tray;
 
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::Emitter;
@@ -69,6 +70,23 @@ async fn github_device_poll(
 #[tauri::command]
 fn github_device_cancel() {
     github_sync::device_cancel();
+}
+
+// ── Menubar tray ────────────────────────────────────────────────────────────
+
+#[tauri::command]
+fn tray_update(app: tauri::AppHandle, title: Option<String>, items: Vec<tray::TrayItem>) {
+    tray::update(app, title, items);
+}
+
+#[tauri::command]
+fn tray_set_title(app: tauri::AppHandle, title: Option<String>) {
+    tray::set_title(app, title);
+}
+
+#[tauri::command]
+fn tray_set_enabled(app: tauri::AppHandle, enabled: bool) {
+    tray::set_enabled(app, enabled);
 }
 
 #[tauri::command]
@@ -164,6 +182,9 @@ pub fn run() {
             gist_find,
             gist_pull,
             gist_push,
+            tray_update,
+            tray_set_title,
+            tray_set_enabled,
             commands::open_privacy_settings,
             commands::get_access_status,
             commands::request_access,

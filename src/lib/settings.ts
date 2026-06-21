@@ -17,6 +17,8 @@ export interface Settings {
   scale: number;
   /** Hours of timeline shown before/after an item in the inspector mini-planner. */
   inspectorContextHours: number;
+  /** Show the current event/reminder and today's agenda in the macOS menu bar. */
+  menubarEnabled: boolean;
   /** Custom order of areas of focus in the sidebar (area ids). */
   areaOrder: string[];
   /** GitHub sync bookkeeping (not secret; the token lives in the Keychain). */
@@ -38,6 +40,7 @@ export const DEFAULT_SETTINGS: Settings = {
   font: "system",
   scale: 1,
   inspectorContextHours: 2,
+  menubarEnabled: true,
   areaOrder: [],
   autoSync: true,
 };

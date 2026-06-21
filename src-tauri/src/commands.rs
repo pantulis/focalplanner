@@ -7,6 +7,8 @@ use crate::eventkit_service as svc;
 use crate::models::{AccessStatus, CalendarSets, EventDto, EventInput, ReminderDto, ReminderInput};
 
 /// Run a blocking EventKit closure off the main thread and flatten errors to `String`.
+/// (The service layer funnels all EventKit access onto one dedicated store thread,
+/// so operations are already serialized there.)
 async fn run<T, F>(f: F) -> Result<T, String>
 where
     F: FnOnce() -> Result<T, eventkit::EventKitError> + Send + 'static,

@@ -58,6 +58,7 @@ import {
 } from "@/lib/reschedule";
 import { useSettings } from "@/lib/settings";
 import { useSyncController } from "@/lib/sync";
+import { useMenubarTray } from "@/lib/tray";
 import { ContextMenu, type MenuNode } from "@/components/ui/context-menu";
 import { PermissionGate } from "@/components/PermissionGate";
 import { AppSidebar, type Section } from "@/components/AppSidebar";
@@ -112,6 +113,12 @@ function Planner() {
   const [areaConfig, setAreaConfig] = useAreaConfig();
   const { settings, update: updateSettings, loaded: settingsLoaded } = useSettings();
   const queryClient = useQueryClient();
+
+  useMenubarTray(
+    settingsLoaded && settings.menubarEnabled,
+    settings.ignoredCalendarIds,
+    settings.ignoredListIds,
+  );
 
   const sync = useSyncController({
     settings,
@@ -426,8 +433,13 @@ function Planner() {
     const calIds = new Set(visibleCalendars.map((c) => c.id));
     const listIds = new Set(visibleLists.map((c) => c.id));
     const order = settings.areaOrder ?? [];
+    // When the calendars list is momentarily empty (a transient refetch under
+    // heavy EventKit churn, or still loading), don't drop configured areas —
+    // fall back to showing any area that has members in the saved config.
+    const haveCalendars = calIds.size > 0 || listIds.size > 0;
     return AREAS.filter((a) => {
       const m = areaMembers(areaConfig, a.id);
+      if (!haveCalendars) return m.calendarIds.length > 0 || m.listIds.length > 0;
       return (
         m.calendarIds.some((id) => calIds.has(id)) ||
         m.listIds.some((id) => listIds.has(id))
