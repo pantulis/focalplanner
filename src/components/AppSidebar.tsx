@@ -15,6 +15,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { Area } from "@/lib/areas";
+import { useDemoActive } from "@/lib/demo/store";
 import { isAreaDue, reviewSinceLabel } from "@/lib/review";
 import { cn } from "@/lib/utils";
 import { SidebarCalendar } from "@/components/SidebarCalendar";
@@ -293,6 +294,7 @@ export function AppSidebar({
   inboxCount,
   overdueCount,
 }: Props) {
+  const demoActive = useDemoActive();
   return (
     <aside className="flex h-full w-56 shrink-0 flex-col border-r border-border bg-sidebar px-2.5 pb-4 text-sidebar-foreground">
       {/* Top strip doubles as the window drag region; clears the macOS traffic lights.
@@ -309,6 +311,11 @@ export function AppSidebar({
         <span className="pointer-events-none text-lg font-semibold">
           FocalPlanner
         </span>
+        {demoActive && (
+          <span className="pointer-events-none mb-0.5 rounded bg-amber-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-600">
+            Demo
+          </span>
+        )}
       </div>
 
       <nav className="space-y-1">

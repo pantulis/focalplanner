@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { demoApi, isDemoActive } from "./demo/store";
 
 // ── Types mirroring the Rust DTOs (camelCase) ─────────────────────────────
 
@@ -93,6 +94,7 @@ export interface GithubAccount {
 export interface AboutInfo {
   version: string;
   buildEpochMs: number;
+  devBuild: boolean;
 }
 
 export interface TrayItemDto {
@@ -127,24 +129,39 @@ export const api = {
   gistPull: (gistId: string) => invoke<string | null>("gist_pull", { gistId }),
   gistPush: (payload: string, gistId: string | null) =>
     invoke<string>("gist_push", { payload, gistId }),
-  getAccessStatus: () => invoke<AccessStatus>("get_access_status"),
-  requestAccess: () => invoke<AccessStatus>("request_access"),
-  listCalendars: () => invoke<CalendarSets>("list_calendars"),
+  getAccessStatus: () =>
+    isDemoActive() ? demoApi.getAccessStatus() : invoke<AccessStatus>("get_access_status"),
+  requestAccess: () =>
+    isDemoActive() ? demoApi.getAccessStatus() : invoke<AccessStatus>("request_access"),
+  listCalendars: () =>
+    isDemoActive() ? demoApi.listCalendars() : invoke<CalendarSets>("list_calendars"),
 
   fetchEvents: (start: string, end: string, calendarIds?: string[]) =>
-    invoke<EventDto[]>("fetch_events", { start, end, calendarIds: calendarIds ?? null }),
-  createEvent: (input: EventInput) => invoke<void>("create_event", { input }),
-  updateEvent: (input: EventInput) => invoke<void>("update_event", { input }),
-  deleteEvent: (id: string) => invoke<void>("delete_event", { id }),
+    isDemoActive()
+      ? demoApi.fetchEvents(start, end, calendarIds)
+      : invoke<EventDto[]>("fetch_events", { start, end, calendarIds: calendarIds ?? null }),
+  createEvent: (input: EventInput) =>
+    isDemoActive() ? demoApi.createEvent(input) : invoke<void>("create_event", { input }),
+  updateEvent: (input: EventInput) =>
+    isDemoActive() ? demoApi.updateEvent(input) : invoke<void>("update_event", { input }),
+  deleteEvent: (id: string) =>
+    isDemoActive() ? demoApi.deleteEvent(id) : invoke<void>("delete_event", { id }),
 
   fetchReminders: (listIds: string[] | undefined, includeCompleted: boolean) =>
-    invoke<ReminderDto[]>("fetch_reminders", {
-      listIds: listIds ?? null,
-      includeCompleted,
-    }),
-  createReminder: (input: ReminderInput) => invoke<void>("create_reminder", { input }),
-  updateReminder: (input: ReminderInput) => invoke<void>("update_reminder", { input }),
+    isDemoActive()
+      ? demoApi.fetchReminders(listIds, includeCompleted)
+      : invoke<ReminderDto[]>("fetch_reminders", {
+          listIds: listIds ?? null,
+          includeCompleted,
+        }),
+  createReminder: (input: ReminderInput) =>
+    isDemoActive() ? demoApi.createReminder(input) : invoke<void>("create_reminder", { input }),
+  updateReminder: (input: ReminderInput) =>
+    isDemoActive() ? demoApi.updateReminder(input) : invoke<void>("update_reminder", { input }),
   setReminderCompleted: (id: string, completed: boolean) =>
-    invoke<void>("set_reminder_completed", { id, completed }),
-  deleteReminder: (id: string) => invoke<void>("delete_reminder", { id }),
+    isDemoActive()
+      ? demoApi.setReminderCompleted(id, completed)
+      : invoke<void>("set_reminder_completed", { id, completed }),
+  deleteReminder: (id: string) =>
+    isDemoActive() ? demoApi.deleteReminder(id) : invoke<void>("delete_reminder", { id }),
 };

@@ -1,6 +1,12 @@
 import { useEffect, useState } from "react";
 import { load, type Store } from "@tauri-apps/plugin-store";
 import {
+  isDemoActive,
+  loadDemoAreaConfig,
+  saveDemoAreaConfig,
+  useDemoActive,
+} from "./demo/store";
+import {
   Briefcase,
   Coffee,
   GraduationCap,
@@ -130,21 +136,27 @@ export function areaHasMembers(config: AreaConfig, areaId: string): boolean {
 
 /** Hook over the persisted area config (Tauri store file). */
 export function useAreaConfig() {
+  const demo = useDemoActive();
   const [config, setConfig] = useState<AreaConfig>({});
 
   useEffect(() => {
     let mounted = true;
+    if (demo) {
+      setConfig(loadDemoAreaConfig());
+      return;
+    }
     loadAreaConfig().then((c) => {
       if (mounted) setConfig(c);
     });
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [demo]);
 
   const update = (next: AreaConfig) => {
     setConfig(next);
-    void saveAreaConfig(next);
+    if (isDemoActive()) saveDemoAreaConfig(next);
+    else void saveAreaConfig(next);
   };
   return [config, update] as const;
 }

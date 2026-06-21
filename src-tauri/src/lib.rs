@@ -12,6 +12,9 @@ use tauri::Emitter;
 struct AboutInfo {
     version: String,
     build_epoch_ms: u64,
+    /// True for debug builds (dev / `--debug`); false for release builds.
+    /// Gates dev-only features like Demo Mode.
+    dev_build: bool,
 }
 
 /// App version and build time (derived from the executable's modified time).
@@ -27,6 +30,7 @@ fn about_info() -> AboutInfo {
     AboutInfo {
         version: env!("CARGO_PKG_VERSION").to_string(),
         build_epoch_ms,
+        dev_build: cfg!(debug_assertions),
     }
 }
 

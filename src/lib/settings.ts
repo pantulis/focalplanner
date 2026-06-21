@@ -1,5 +1,11 @@
 import { useEffect, useState } from "react";
 import { load, type Store } from "@tauri-apps/plugin-store";
+import {
+  isDemoActive,
+  loadDemoSettings,
+  saveDemoSettings,
+  useDemoActive,
+} from "./demo/store";
 
 export type PlannerLayout = "swimlanes" | "pipeline" | "horizon";
 
@@ -168,11 +174,22 @@ export function applyAppearance(settings: Settings): void {
 }
 
 export function useSettings() {
+  const demo = useDemoActive();
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [loaded, setLoaded] = useState(false);
 
+  // Re-source settings whenever Demo Mode is toggled: in demo we use a separate
+  // in-browser settings store (full sandbox); otherwise the real Tauri store.
   useEffect(() => {
     let mounted = true;
+    if (demo) {
+      const s = loadDemoSettings();
+      setSettings(s);
+      setLoaded(true);
+      applyAppearance(s);
+      return;
+    }
+    setLoaded(false);
     loadSettings().then((s) => {
       if (mounted) {
         setSettings(s);
@@ -183,12 +200,13 @@ export function useSettings() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [demo]);
 
   const update = (patch: Partial<Settings>) => {
     setSettings((prev) => {
       const next = { ...prev, ...patch };
-      void saveSettings(next);
+      if (isDemoActive()) saveDemoSettings(next);
+      else void saveSettings(next);
       applyAppearance(next);
       return next;
     });

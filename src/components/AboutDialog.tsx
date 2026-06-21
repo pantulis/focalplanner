@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
-import { Cloud, CloudOff } from "lucide-react";
+import { Cloud, CloudOff, FlaskConical } from "lucide-react";
 import { api, type AboutInfo } from "@/lib/api";
+import { useDemoController } from "@/lib/demo/store";
+import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 
 interface Props {
@@ -12,9 +14,12 @@ interface Props {
 
 export function AboutDialog({ open, onClose, connected, login }: Props) {
   const [info, setInfo] = useState<AboutInfo | null>(null);
+  const demo = useDemoController();
+  const [confirming, setConfirming] = useState(false);
 
   useEffect(() => {
     if (open) api.aboutInfo().then(setInfo).catch(() => setInfo(null));
+    else setConfirming(false);
   }, [open]);
 
   if (!open) return null;
@@ -62,6 +67,87 @@ export function AboutDialog({ open, onClose, connected, login }: Props) {
           </span>
         </div>
       </div>
+
+      {info?.devBuild && (
+        <div className="mt-5 border-t border-border pt-4">
+          <div className="flex items-center justify-between">
+            <span className="flex items-center gap-1.5 text-sm font-medium">
+              <FlaskConical className="size-4" /> Demo Mode
+            </span>
+            {demo.active && (
+              <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium text-amber-600">
+                Active
+              </span>
+            )}
+          </div>
+
+          {demo.active ? (
+            <>
+              <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                The app is showing built-in sample data. Your real Calendar and
+                Reminders are untouched.
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-3 w-full"
+                onClick={() => {
+                  demo.exit();
+                  onClose();
+                }}
+              >
+                Exit Demo Mode
+              </Button>
+            </>
+          ) : confirming ? (
+            <>
+              <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                Demo Mode swaps in a built-in set of sample calendars, events, and
+                reminders — generated fresh and dated around today — so you can
+                capture screenshots without exposing personal data. Your real
+                Calendar and Reminders are never read or modified while it's on,
+                and the sample data stays on this device. Turn it off any time to
+                return to your real data, exactly as it was.
+              </p>
+              <div className="mt-3 flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => setConfirming(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => {
+                    demo.enter();
+                    onClose();
+                  }}
+                >
+                  Enter Demo Mode
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                Populate the app with safe sample data for screenshots, without
+                touching your real Calendar and Reminders.
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-3 w-full"
+                onClick={() => setConfirming(true)}
+              >
+                Enter Demo Mode…
+              </Button>
+            </>
+          )}
+        </div>
+      )}
     </Dialog>
   );
 }
