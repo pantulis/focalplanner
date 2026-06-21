@@ -112,6 +112,10 @@ ad-hoc-signed `.dmg`** and attaches it to a GitHub Release. To publish:
 3. The workflow builds on a macOS runner and creates a **draft** Release with the
    DMG attached. Review it on GitHub and click **Publish release**.
 
+Release notes are assembled automatically from `.github/release-notes-head.md` and
+`.github/release-notes-tail.md` (edit these to change the intro / install sections),
+with a **What's changed** list generated from the commits since the previous tag.
+
 No Apple Developer secrets are required. The build is signed ad-hoc (`APPLE_SIGNING_IDENTITY: "-"`)
 and **not notarized**, so the first-launch Gatekeeper step above applies. To enable
 notarization later, add the `APPLE_*` secrets to the repo and the workflow will use them.

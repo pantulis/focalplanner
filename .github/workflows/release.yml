@@ -14,6 +14,9 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history + tags so we can diff against the previous release tag.
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -32,6 +35,33 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      - name: Generate release notes
+        id: notes
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          PREV_TAG="$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)"
+          if [ -n "${PREV_TAG}" ]; then
+            CHANGELOG="$(git log --no-merges --pretty='- %s' "${PREV_TAG}..${TAG}")"
+            COMPARE="**Full changelog:** https://github.com/${GITHUB_REPOSITORY}/compare/${PREV_TAG}...${TAG}"
+          else
+            CHANGELOG="- Initial release."
+            COMPARE=""
+          fi
+          {
+            cat .github/release-notes-head.md
+            echo
+            echo "${CHANGELOG}"
+            echo
+            if [ -n "${COMPARE}" ]; then echo "${COMPARE}"; echo; fi
+            cat .github/release-notes-tail.md
+          } > release-body.md
+          {
+            echo "body<<__FP_BODY_EOF__"
+            cat release-body.md
+            echo "__FP_BODY_EOF__"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Build and publish (ad-hoc signed universal DMG)
         uses: tauri-apps/tauri-action@v0
         env:
@@ -46,16 +76,4 @@ jobs:
           releaseName: "FocalPlanner ${{ github.ref_name }}"
           releaseDraft: true
           prerelease: false
-          releaseBody: |
-            ## FocalPlanner ${{ github.ref_name }}
-
-            Download the `.dmg` below, open it, and drag **FocalPlanner** to **Applications**.
-
-            ### First launch (one-time Gatekeeper step)
-            This build is ad-hoc signed but **not notarized by Apple**, so macOS blocks it the first time. Do one of:
-
-            - **macOS 14 and earlier:** right-click the app in Applications → **Open** → **Open**.
-            - **macOS 15 (Sequoia):** double-click once (it will be blocked), then go to **System Settings → Privacy & Security** and click **Open Anyway**.
-            - **Terminal (any version):** `xattr -dr com.apple.quarantine /Applications/FocalPlanner.app`
-
-            After this one-time step the app opens normally. On first run, grant Calendar and Reminders access when prompted.
+          releaseBody: ${{ steps.notes.outputs.body }}
