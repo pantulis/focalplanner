@@ -50,7 +50,7 @@ import { PermissionGate } from "@/components/PermissionGate";
 import { AppSidebar, type Section } from "@/components/AppSidebar";
 import { PlannerToolbar } from "@/components/PlannerToolbar";
 import { TimeGridView } from "@/components/TimeGridView";
-import { ReminderList } from "@/components/ReminderList";
+import { ReminderList, type StatusFilter } from "@/components/ReminderList";
 import { EventInspector } from "@/components/EventInspector";
 import { ReminderInspector } from "@/components/ReminderInspector";
 import { AreasDialog } from "@/components/AreasDialog";
@@ -142,6 +142,16 @@ function Planner() {
   const [section, setSection] = useState<Section>("today");
   const [anchor, setAnchor] = useState<Date>(() => new Date());
   const [activeArea, setActiveArea] = useState<string>("all");
+  // Reminder list/status filters remembered per area of focus.
+  const [areaFilters, setAreaFilters] = useState<
+    Record<string, { list: string; status: StatusFilter }>
+  >({});
+  const reminderFilter = areaFilters[activeArea] ?? { list: "all", status: "today" as StatusFilter };
+  const setReminderFilter = (patch: Partial<{ list: string; status: StatusFilter }>) =>
+    setAreaFilters((prev) => ({
+      ...prev,
+      [activeArea]: { ...(prev[activeArea] ?? { list: "all", status: "today" }), ...patch },
+    }));
   const [showReminders, setShowReminders] = useState(true);
   const [areasOpen, setAreasOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -435,6 +445,39 @@ function Planner() {
     updateReminderDue(reminder, toLocalDateTime(rescheduleDate(whenId as never, hour)));
   }
 
+  /**
+   * Submenu items for "Move to …": the current target first (disabled), a
+   * separator, then the remaining valid targets.
+   */
+  function moveTargetNodes(
+    targets: CalendarDto[],
+    current: { id?: string | null; title?: string | null; color?: string | null },
+    prefix: string,
+    emptyLabel: string,
+    onPick: (id: string) => void,
+  ): MenuNode[] {
+    const rest = targets.filter((c) => c.id !== current.id);
+    const nodes: MenuNode[] = [];
+    if (current.id) {
+      nodes.push({
+        id: `${prefix}-current`,
+        label: current.title ?? "Current",
+        colorDot: current.color,
+        disabled: true,
+      });
+    }
+    rest.forEach((c, i) =>
+      nodes.push({
+        id: `${prefix}-${c.id}`,
+        label: c.title,
+        colorDot: c.color,
+        separatorBefore: !!current.id && i === 0,
+        onSelect: () => onPick(c.id),
+      }),
+    );
+    return nodes.length ? nodes : [{ id: "none", label: emptyLabel, disabled: true }];
+  }
+
   function rescheduleNode(onPick: (whenId: string, hour: number) => void): MenuNode {
     return {
       id: "reschedule",
@@ -466,15 +509,13 @@ function Planner() {
         label: "Move to Calendar",
         icon: CalendarIcon,
         separatorBefore: true,
-        children: cals.length
-          ? cals.map((c) => ({
-              id: `cal-${c.id}`,
-              label: c.title,
-              colorDot: c.color,
-              disabled: c.id === event.calendarId,
-              onSelect: () => moveEventToCalendar(event, c.id),
-            }))
-          : [{ id: "none", label: "No calendars in area", disabled: true }],
+        children: moveTargetNodes(
+          cals,
+          { id: event.calendarId, title: event.calendarTitle, color: event.color },
+          "cal",
+          "No calendars in area",
+          (id) => moveEventToCalendar(event, id),
+        ),
       },
       rescheduleNode((w, h) => rescheduleEvent(event, w, h)),
       {
@@ -505,15 +546,13 @@ function Planner() {
         label: "Move to List",
         icon: ListTodo,
         separatorBefore: true,
-        children: lists.length
-          ? lists.map((c) => ({
-              id: `list-${c.id}`,
-              label: c.title,
-              colorDot: c.color,
-              disabled: c.id === reminder.listId,
-              onSelect: () => moveReminderToList(reminder, c.id),
-            }))
-          : [{ id: "none", label: "No lists in area", disabled: true }],
+        children: moveTargetNodes(
+          lists,
+          { id: reminder.listId, title: reminder.listTitle, color: reminder.color },
+          "list",
+          "No lists in area",
+          (id) => moveReminderToList(reminder, id),
+        ),
       },
       rescheduleNode((w, h) => rescheduleReminder(reminder, w, h)),
     ];
@@ -790,6 +829,10 @@ function Planner() {
               reminders={filteredReminders}
               groups={availableGroups}
               loading={reminders.isLoading}
+              listFilter={reminderFilter.list}
+              statusFilter={reminderFilter.status}
+              onListFilterChange={(list) => setReminderFilter({ list })}
+              onStatusFilterChange={(status) => setReminderFilter({ status })}
               onToggle={(id, completed) =>
                 reminderMx.toggle.mutate({ id, completed }, { onError: fail })
               }
@@ -812,6 +855,7 @@ function Planner() {
             calendars={eligibleCalendars}
             onSubmit={submitEvent}
             onDelete={deleteEvent}
+            weekStartsOn={weekStartsOn}
             busy={eventBusy}
           />
 
@@ -828,6 +872,7 @@ function Planner() {
               r.id &&
               reminderMx.toggle.mutate({ id: r.id, completed }, { onError: fail })
             }
+            weekStartsOn={weekStartsOn}
             busy={reminderBusy}
           />
         </div>

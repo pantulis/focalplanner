@@ -152,6 +152,156 @@
   --sidebar-foreground: #586e75;
 }
 
+/* Solarized Dark */
+[data-theme="solarized-dark"] {
+  --background: #002b36;
+  --foreground: #93a1a1;
+  --card: #073642;
+  --card-foreground: #eee8d5;
+  --popover: #073642;
+  --popover-foreground: #eee8d5;
+  --primary: #268bd2;
+  --primary-foreground: #002b36;
+  --secondary: #073642;
+  --secondary-foreground: #eee8d5;
+  --muted: #073642;
+  --muted-foreground: #657b83;
+  --accent: #094a59;
+  --accent-foreground: #eee8d5;
+  --destructive: #dc322f;
+  --destructive-foreground: #fdf6e3;
+  --border: #0a4150;
+  --input: #094a59;
+  --ring: #268bd2;
+  --sidebar: #00212b;
+  --sidebar-foreground: #93a1a1;
+}
+
+/* Gruvbox Dark */
+[data-theme="gruvbox"] {
+  --background: #282828;
+  --foreground: #ebdbb2;
+  --card: #3c3836;
+  --card-foreground: #ebdbb2;
+  --popover: #3c3836;
+  --popover-foreground: #ebdbb2;
+  --primary: #fabd2f;
+  --primary-foreground: #282828;
+  --secondary: #504945;
+  --secondary-foreground: #ebdbb2;
+  --muted: #3c3836;
+  --muted-foreground: #a89984;
+  --accent: #504945;
+  --accent-foreground: #ebdbb2;
+  --destructive: #fb4934;
+  --destructive-foreground: #282828;
+  --border: #504945;
+  --input: #665c54;
+  --ring: #fabd2f;
+  --sidebar: #1d2021;
+  --sidebar-foreground: #ebdbb2;
+}
+
+/* Dracula */
+[data-theme="dracula"] {
+  --background: #282a36;
+  --foreground: #f8f8f2;
+  --card: #343746;
+  --card-foreground: #f8f8f2;
+  --popover: #343746;
+  --popover-foreground: #f8f8f2;
+  --primary: #bd93f9;
+  --primary-foreground: #282a36;
+  --secondary: #44475a;
+  --secondary-foreground: #f8f8f2;
+  --muted: #343746;
+  --muted-foreground: #9aa0bf;
+  --accent: #44475a;
+  --accent-foreground: #f8f8f2;
+  --destructive: #ff5555;
+  --destructive-foreground: #282a36;
+  --border: #44475a;
+  --input: #545775;
+  --ring: #bd93f9;
+  --sidebar: #21222c;
+  --sidebar-foreground: #f8f8f2;
+}
+
+/* Tokyo Night */
+[data-theme="tokyo-night"] {
+  --background: #1a1b26;
+  --foreground: #c0caf5;
+  --card: #24283b;
+  --card-foreground: #c0caf5;
+  --popover: #24283b;
+  --popover-foreground: #c0caf5;
+  --primary: #7aa2f7;
+  --primary-foreground: #1a1b26;
+  --secondary: #292e42;
+  --secondary-foreground: #c0caf5;
+  --muted: #24283b;
+  --muted-foreground: #828bb8;
+  --accent: #414868;
+  --accent-foreground: #c0caf5;
+  --destructive: #f7768e;
+  --destructive-foreground: #1a1b26;
+  --border: #2f344d;
+  --input: #414868;
+  --ring: #7aa2f7;
+  --sidebar: #16161e;
+  --sidebar-foreground: #c0caf5;
+}
+
+/* One Dark */
+[data-theme="one-dark"] {
+  --background: #282c34;
+  --foreground: #abb2bf;
+  --card: #2f343f;
+  --card-foreground: #abb2bf;
+  --popover: #2f343f;
+  --popover-foreground: #abb2bf;
+  --primary: #61afef;
+  --primary-foreground: #282c34;
+  --secondary: #3e4451;
+  --secondary-foreground: #abb2bf;
+  --muted: #2f343f;
+  --muted-foreground: #828997;
+  --accent: #3e4451;
+  --accent-foreground: #abb2bf;
+  --destructive: #e06c75;
+  --destructive-foreground: #282c34;
+  --border: #3e4451;
+  --input: #4b5263;
+  --ring: #61afef;
+  --sidebar: #21252b;
+  --sidebar-foreground: #abb2bf;
+}
+
+/* Everforest Dark */
+[data-theme="everforest"] {
+  --background: #2d353b;
+  --foreground: #d3c6aa;
+  --card: #343f44;
+  --card-foreground: #d3c6aa;
+  --popover: #343f44;
+  --popover-foreground: #d3c6aa;
+  --primary: #a7c080;
+  --primary-foreground: #2d353b;
+  --secondary: #475258;
+  --secondary-foreground: #d3c6aa;
+  --muted: #343f44;
+  --muted-foreground: #9da9a0;
+  --accent: #475258;
+  --accent-foreground: #d3c6aa;
+  --destructive: #e67e80;
+  --destructive-foreground: #2d353b;
+  --border: #475258;
+  --input: #4f585e;
+  --ring: #a7c080;
+  --sidebar: #272e33;
+  --sidebar-foreground: #d3c6aa;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -203,4 +353,48 @@
     height: 100%;
     margin: 0;
   }
+}
+
+/* react-day-picker theming — map rdp variables onto the app's design tokens.
+   Sized compactly so the popover fits inside the ~340px inspector sidebar. */
+.fp-calendar {
+  --rdp-accent-color: var(--primary);
+  --rdp-accent-background-color: var(--accent);
+  --rdp-today-color: var(--primary);
+  --rdp-day_button-width: 2rem;
+  --rdp-day_button-height: 2rem;
+  --rdp-day-width: 2rem;
+  --rdp-day-height: 2rem;
+  --rdp-day_button-border-radius: var(--radius);
+  --rdp-selected-border: none;
+  --rdp-nav-height: 2rem;
+  --rdp-nav_button-height: 1.75rem;
+  --rdp-nav_button-width: 1.75rem;
+  --rdp-weekday-padding: 0.25rem 0;
+  --rdp-months-gap: 0;
+  --rdp-weekday-opacity: 1;
+  margin: 0;
+  font-size: 0.8125rem;
+}
+.fp-calendar .rdp-month_caption {
+  font-size: 0.875rem;
+  height: var(--rdp-nav-height);
+}
+.fp-calendar .rdp-day:not(.rdp-selected) .rdp-day_button:hover {
+  background-color: var(--accent);
+}
+.fp-calendar .rdp-selected .rdp-day_button {
+  background-color: var(--primary);
+  color: var(--primary-foreground);
+  border: none;
+}
+.fp-calendar .rdp-chevron {
+  fill: var(--foreground);
+}
+.fp-calendar .rdp-weekday {
+  color: var(--muted-foreground);
+  font-weight: 500;
+}
+.fp-calendar .rdp-caption_label {
+  font-weight: 600;
 }

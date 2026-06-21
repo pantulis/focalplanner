@@ -194,7 +194,9 @@ fn parse_due(s: &str) -> NSDateComponents {
     let year = parts.next().and_then(|v| v.parse().ok()).unwrap_or(2000);
     let month = parts.next().and_then(|v| v.parse().ok()).unwrap_or(1);
     let day = parts.next().and_then(|v| v.parse().ok()).unwrap_or(1);
-    let comps = NSDateComponents::date(year, month, day);
+    // EventKit ignores due components that carry no calendar, so attach one
+    // (mirrors Apple's `Calendar.current.dateComponents(...)`).
+    let comps = NSDateComponents::date(year, month, day).with_calendar_identifier("gregorian");
     match time_part {
         Some(t) => {
             let mut tp = t.split(':');

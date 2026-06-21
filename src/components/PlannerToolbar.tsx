@@ -23,8 +23,11 @@ export function PlannerToolbar({
   onToggleReminders,
 }: Props) {
   return (
-    <header className="flex items-center gap-3 border-b border-border px-4 py-2.5">
-      <h1 className="text-base font-semibold">{title}</h1>
+    <header
+      data-tauri-drag-region
+      className="flex select-none items-center gap-3 border-b border-border px-4 py-2.5"
+    >
+      <h1 className="pointer-events-none text-base font-semibold">{title}</h1>
 
       {/* Date navigation */}
       <div className="flex items-center gap-1">
@@ -51,7 +54,9 @@ export function PlannerToolbar({
         </Button>
       </div>
 
-      {!navDisabled && <div className="text-sm font-semibold">{label}</div>}
+      {!navDisabled && (
+        <div className="pointer-events-none text-sm font-semibold">{label}</div>
+      )}
 
       <div className="ml-auto flex items-center gap-2">
         <Button

@@ -130,10 +130,21 @@ export function AppSidebar({
   sync,
 }: Props) {
   return (
-    <aside className="flex h-full w-56 shrink-0 flex-col border-r border-border bg-sidebar px-2.5 py-4 text-sidebar-foreground">
-      <div className="mb-5 flex items-center gap-2 px-2">
-        <img src="/icon.png" alt="" className="size-6 rounded-md" />
-        <span className="text-lg font-semibold">FocalPlanner</span>
+    <aside className="flex h-full w-56 shrink-0 flex-col border-r border-border bg-sidebar px-2.5 pb-4 text-sidebar-foreground">
+      {/* Top strip doubles as the window drag region; clears the macOS traffic lights.
+          Children are pointer-events-none so a click targets the drag region itself. */}
+      <div
+        data-tauri-drag-region
+        className="mb-3 flex select-none items-end gap-2 px-2 pt-8"
+      >
+        <img
+          src="/icon.png"
+          alt=""
+          className="pointer-events-none size-6 rounded-md"
+        />
+        <span className="pointer-events-none text-lg font-semibold">
+          FocalPlanner
+        </span>
       </div>
 
       <nav className="space-y-1">

@@ -126,7 +126,7 @@ export function SettingsDialog({
           ))}
         </div>
 
-        <div className="max-h-[60vh] min-w-0 flex-1 overflow-y-auto pr-1">
+        <div className="h-[30rem] min-w-0 flex-1 overflow-y-auto pr-1">
           {pane === "general" && (
             <div className="space-y-5">
               <label className="flex items-center gap-2 text-sm">
@@ -206,6 +206,38 @@ export function SettingsDialog({
 
           {pane === "appearance" && (
             <div className="space-y-5">
+              <div className="flex gap-4">
+                <div className="flex-1 space-y-1.5">
+                  <Label>Typeface</Label>
+                  <Select
+                    value={settings.font}
+                    onChange={(e) => onChange({ font: e.target.value })}
+                    className="h-8 w-full text-xs"
+                  >
+                    {FONTS.map((f) => (
+                      <option key={f.id} value={f.id}>
+                        {f.label}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+
+                <div className="flex-1 space-y-1.5">
+                  <Label>UI scale</Label>
+                  <Select
+                    value={settings.scale}
+                    onChange={(e) => onChange({ scale: Number(e.target.value) })}
+                    className="h-8 w-full text-xs"
+                  >
+                    {SCALES.map((s) => (
+                      <option key={s.value} value={s.value}>
+                        {s.label} ({Math.round(s.value * 100)}%)
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+              </div>
+
               <div className="space-y-2">
                 <Label>Theme</Label>
                 <div className="grid grid-cols-3 gap-2">
@@ -232,36 +264,6 @@ export function SettingsDialog({
                     </button>
                   ))}
                 </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label>Typeface</Label>
-                <Select
-                  value={settings.font}
-                  onChange={(e) => onChange({ font: e.target.value })}
-                  className="h-8 w-40 text-xs"
-                >
-                  {FONTS.map((f) => (
-                    <option key={f.id} value={f.id}>
-                      {f.label}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label>UI scale</Label>
-                <Select
-                  value={settings.scale}
-                  onChange={(e) => onChange({ scale: Number(e.target.value) })}
-                  className="h-8 w-40 text-xs"
-                >
-                  {SCALES.map((s) => (
-                    <option key={s.value} value={s.value}>
-                      {s.label} ({Math.round(s.value * 100)}%)
-                    </option>
-                  ))}
-                </Select>
               </div>
             </div>
           )}

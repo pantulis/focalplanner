@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Circle, CircleCheck, Repeat, Trash2, X } from "lucide-react";
 import type { CalendarDto, ReminderDto, ReminderInput } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { DateTimePicker } from "@/components/ui/date-time-picker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
@@ -20,7 +21,15 @@ interface Props {
   onSubmit: (input: ReminderInput) => void;
   onDelete: (id: string) => void;
   onToggleComplete: (reminder: ReminderDto, completed: boolean) => void;
+  weekStartsOn?: 0 | 1;
   busy?: boolean;
+}
+
+/** Split a stored due ("YYYY-MM-DD" or "YYYY-MM-DDTHH:MM") into [date, time]. */
+function splitDue(s?: string | null): [string, string] {
+  if (!s) return ["", ""];
+  const [d, t] = s.split("T");
+  return [d ?? "", t ? t.slice(0, 5) : ""];
 }
 
 // EventKit priority buckets: 0 none, 1 high, 5 medium, 9 low.
@@ -41,13 +50,15 @@ export function ReminderInspector({
   onSubmit,
   onDelete,
   onToggleComplete,
+  weekStartsOn = 1,
   busy,
 }: Props) {
   const editable = lists.filter((c) => c.editable);
   const [title, setTitle] = useState("");
-  // Uncontrolled: WebKit doesn't fire React onChange for datetime-local, so we read
-  // the value from the DOM at submit instead of tracking it in state.
-  const dueRef = useRef<HTMLInputElement>(null);
+  const [dueDate, setDueDate] = useState("");
+  // type="time" doesn't capture in WKWebView, so use hour/minute selects.
+  const [dueHour, setDueHour] = useState("");
+  const [dueMinute, setDueMinute] = useState("00");
   const [priority, setPriority] = useState(0);
   const [listId, setListId] = useState("");
   const [notes, setNotes] = useState("");
@@ -55,16 +66,19 @@ export function ReminderInspector({
 
   useEffect(() => {
     if (!open) return;
+    const [d, t] = splitDue(reminder ? reminder.due : initialDue);
+    setDueDate(d);
+    const [hh, mm] = t ? t.split(":") : ["", ""];
+    setDueHour(hh ?? "");
+    setDueMinute(mm || "00");
     if (reminder) {
       setTitle(reminder.title);
-      if (dueRef.current) dueRef.current.value = reminder.due ?? "";
       setPriority(reminder.priority);
       setListId(reminder.listId ?? editable[0]?.id ?? "");
       setNotes(reminder.notes ?? "");
       setCompleted(reminder.completed);
     } else {
       setTitle("");
-      if (dueRef.current) dueRef.current.value = initialDue ?? "";
       setPriority(0);
       setListId(initialListId ?? editable[0]?.id ?? "");
       setNotes("");
@@ -93,10 +107,12 @@ export function ReminderInspector({
 
   function submit() {
     if (!title.trim()) return;
+    const time = dueHour ? `${dueHour}:${dueMinute || "00"}` : "";
+    const due = dueDate ? (time ? `${dueDate}T${time}` : dueDate) : null;
     onSubmit({
       id: reminder?.id ?? null,
       title: title.trim(),
-      due: dueRef.current?.value || null,
+      due,
       priority,
       listId: listId || null,
       notes: notes || null,
@@ -165,7 +181,15 @@ export function ReminderInspector({
 
         <div className="space-y-1.5">
           <Label htmlFor="rm-due">Due</Label>
-          <Input id="rm-due" type="datetime-local" ref={dueRef} />
+          <DateTimePicker
+            date={dueDate}
+            hour={dueHour}
+            minute={dueMinute}
+            onDateChange={setDueDate}
+            onHourChange={setDueHour}
+            onMinuteChange={setDueMinute}
+            weekStartsOn={weekStartsOn}
+          />
         </div>
 
         <div className="space-y-1.5">

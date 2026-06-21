@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Trash2, X } from "lucide-react";
 import type { CalendarDto, EventDto, EventInput } from "@/lib/api";
 import { Button } from "@/components/ui/button";
+import { DateTimePicker } from "@/components/ui/date-time-picker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
@@ -21,6 +22,7 @@ interface Props {
   calendars: CalendarDto[];
   onSubmit: (input: EventInput) => void;
   onDelete: (id: string) => void;
+  weekStartsOn?: 0 | 1;
   busy?: boolean;
 }
 
@@ -37,6 +39,13 @@ function plusHour(local: string): string {
   return toLocalInput(d.toISOString());
 }
 
+/** Split a "YYYY-MM-DDTHH:MM" local string into picker parts. */
+function splitLocal(s: string): { date: string; hour: string; minute: string } {
+  const [d, t] = s.split("T");
+  const [hh, mm] = (t ?? "").split(":");
+  return { date: d ?? "", hour: hh ?? "", minute: mm || "00" };
+}
+
 export function EventInspector({
   open,
   onClose,
@@ -47,14 +56,19 @@ export function EventInspector({
   calendars,
   onSubmit,
   onDelete,
+  weekStartsOn = 1,
   busy,
 }: Props) {
   const editable = calendars.filter((c) => c.editable);
   const [title, setTitle] = useState("");
-  // Uncontrolled: WebKit doesn't fire React onChange for datetime-local, so we read
-  // these from the DOM at submit instead of tracking them in state.
-  const startRef = useRef<HTMLInputElement>(null);
-  const endRef = useRef<HTMLInputElement>(null);
+  // Date + hour/minute selects instead of <input type="datetime-local">, which
+  // doesn't capture values in WKWebView.
+  const [startDate, setStartDate] = useState("");
+  const [startHour, setStartHour] = useState("");
+  const [startMinute, setStartMinute] = useState("00");
+  const [endDate, setEndDate] = useState("");
+  const [endHour, setEndHour] = useState("");
+  const [endMinute, setEndMinute] = useState("00");
   const [allDay, setAllDay] = useState(false);
   const [calendarId, setCalendarId] = useState("");
   const [location, setLocation] = useState("");
@@ -63,19 +77,23 @@ export function EventInspector({
   useEffect(() => {
     if (!open) return;
     if (event) {
+      const s = splitLocal(toLocalInput(event.start));
+      const e = splitLocal(toLocalInput(event.end));
       setTitle(event.title);
-      if (startRef.current) startRef.current.value = toLocalInput(event.start);
-      if (endRef.current) endRef.current.value = toLocalInput(event.end);
+      setStartDate(s.date); setStartHour(s.hour); setStartMinute(s.minute);
+      setEndDate(e.date); setEndHour(e.hour); setEndMinute(e.minute);
       setAllDay(event.allDay);
       setCalendarId(event.calendarId ?? editable[0]?.id ?? "");
       setLocation(event.location ?? "");
       setNotes(event.notes ?? "");
     } else {
-      const s = initialStart ? toLocalInput(initialStart.toISOString()) : defaultStart();
+      const sLocal = initialStart ? toLocalInput(initialStart.toISOString()) : defaultStart();
+      const eLocal = initialEnd ? toLocalInput(initialEnd.toISOString()) : plusHour(sLocal);
+      const s = splitLocal(sLocal);
+      const e = splitLocal(eLocal);
       setTitle("");
-      if (startRef.current) startRef.current.value = s;
-      if (endRef.current)
-        endRef.current.value = initialEnd ? toLocalInput(initialEnd.toISOString()) : plusHour(s);
+      setStartDate(s.date); setStartHour(s.hour); setStartMinute(s.minute);
+      setEndDate(e.date); setEndHour(e.hour); setEndMinute(e.minute);
       setAllDay(false);
       setCalendarId(initialCalendarId ?? editable[0]?.id ?? "");
       setLocation("");
@@ -98,8 +116,12 @@ export function EventInspector({
 
   function submit() {
     if (!title.trim()) return;
-    const startVal = startRef.current?.value || defaultStart();
-    const endVal = endRef.current?.value || plusHour(startVal);
+    const startVal = startDate
+      ? `${startDate}T${startHour || "00"}:${startMinute || "00"}`
+      : defaultStart();
+    const endVal = endDate
+      ? `${endDate}T${endHour || "00"}:${endMinute || "00"}`
+      : plusHour(startVal);
     onSubmit({
       id: event?.id ?? null,
       title: title.trim(),
@@ -139,13 +161,29 @@ export function EventInspector({
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="ev-start">Starts</Label>
-          <Input id="ev-start" type="datetime-local" ref={startRef} />
+          <Label>Starts</Label>
+          <DateTimePicker
+            date={startDate}
+            hour={startHour}
+            minute={startMinute}
+            onDateChange={setStartDate}
+            onHourChange={setStartHour}
+            onMinuteChange={setStartMinute}
+            weekStartsOn={weekStartsOn}
+          />
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="ev-end">Ends</Label>
-          <Input id="ev-end" type="datetime-local" ref={endRef} />
+          <Label>Ends</Label>
+          <DateTimePicker
+            date={endDate}
+            hour={endHour}
+            minute={endMinute}
+            onDateChange={setEndDate}
+            onHourChange={setEndHour}
+            onMinuteChange={setEndMinute}
+            weekStartsOn={weekStartsOn}
+          />
         </div>
 
         <label className="flex items-center gap-2 text-sm">

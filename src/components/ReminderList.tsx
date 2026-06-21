@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { addDays, parseISO, startOfDay } from "date-fns";
 import { Loader2, Repeat, Trash2 } from "lucide-react";
@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import { formatReminderDue } from "@/lib/dates";
 import { POOF_ANIMATE, POOF_EXIT, POOF_INITIAL, POOF_TRANSITION } from "@/lib/anim";
 
-type StatusFilter = "all" | "scheduled" | "unscheduled" | "today" | "week";
+export type StatusFilter = "all" | "scheduled" | "unscheduled" | "today" | "week";
 
 const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
   { value: "all", label: "All" },
@@ -23,6 +23,11 @@ interface Props {
   reminders: ReminderDto[] | undefined;
   groups: CalendarDto[];
   loading: boolean;
+  /** Controlled filters — persisted per area of focus by the parent. */
+  listFilter: string;
+  statusFilter: StatusFilter;
+  onListFilterChange: (value: string) => void;
+  onStatusFilterChange: (value: StatusFilter) => void;
   onToggle: (id: string, completed: boolean) => void;
   onEdit: (reminder: ReminderDto) => void;
   onDelete: (id: string) => void;
@@ -52,21 +57,24 @@ export function ReminderList({
   reminders,
   groups,
   loading,
+  listFilter,
+  statusFilter,
+  onListFilterChange,
+  onStatusFilterChange,
   onToggle,
   onEdit,
   onDelete,
   onContextMenu,
   onEmptyContextMenu,
 }: Props) {
-  const [groupFilter, setGroupFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("today");
+  const groupFilter = listFilter;
 
-  // Reset the group filter if the active area no longer contains it.
+  // Reset the list filter if the active area no longer contains it.
   useEffect(() => {
     if (groupFilter !== "all" && !groups.some((g) => g.id === groupFilter)) {
-      setGroupFilter("all");
+      onListFilterChange("all");
     }
-  }, [groups, groupFilter]);
+  }, [groups, groupFilter, onListFilterChange]);
 
   const visible = useMemo(() => {
     const dueMs = (r: ReminderDto) =>
@@ -95,7 +103,7 @@ export function ReminderList({
       <div className="flex items-center gap-2 px-4 py-2.5">
         <Select
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+          onChange={(e) => onStatusFilterChange(e.target.value as StatusFilter)}
           className="h-8 text-xs"
           aria-label="Status filter"
         >
@@ -107,11 +115,11 @@ export function ReminderList({
         </Select>
         <Select
           value={groupFilter}
-          onChange={(e) => setGroupFilter(e.target.value)}
+          onChange={(e) => onListFilterChange(e.target.value)}
           className="h-8 text-xs"
-          aria-label="Group filter"
+          aria-label="List filter"
         >
-          <option value="all">All Groups</option>
+          <option value="all">All Lists</option>
           {groups.map((g) => (
             <option key={g.id} value={g.id}>
               {g.title}

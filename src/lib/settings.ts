@@ -51,6 +51,12 @@ export const THEMES: ThemeOption[] = [
   { id: "catppuccin", label: "Catppuccin", dark: true, swatch: ["#1e1e2e", "#cba6f7", "#585b70"] },
   { id: "rose-pine", label: "Rosé Pine", dark: true, swatch: ["#191724", "#c4a7e7", "#403d52"] },
   { id: "solarized", label: "Solarized", dark: false, swatch: ["#fdf6e3", "#268bd2", "#eee8d5"] },
+  { id: "solarized-dark", label: "Solarized Dark", dark: true, swatch: ["#002b36", "#268bd2", "#073642"] },
+  { id: "gruvbox", label: "Gruvbox", dark: true, swatch: ["#282828", "#fabd2f", "#504945"] },
+  { id: "dracula", label: "Dracula", dark: true, swatch: ["#282a36", "#bd93f9", "#44475a"] },
+  { id: "tokyo-night", label: "Tokyo Night", dark: true, swatch: ["#1a1b26", "#7aa2f7", "#414868"] },
+  { id: "one-dark", label: "One Dark", dark: true, swatch: ["#282c34", "#61afef", "#3e4451"] },
+  { id: "everforest", label: "Everforest", dark: true, swatch: ["#2d353b", "#a7c080", "#475258"] },
 ];
 
 export interface FontOption {
