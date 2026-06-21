@@ -8,6 +8,37 @@ TypeScript + Tailwind + shadcn-style UI.
 > **macOS only.** EventKit is an Apple framework; the app does not build/run on
 > other platforms.
 
+## Download & install
+
+Grab the latest `.dmg` from the [**Releases**](https://github.com/pantulis/focalplanner/releases)
+page, open it, and drag **FocalPlanner** into your **Applications** folder.
+
+> [!IMPORTANT]
+> These builds are **ad-hoc signed but not notarized by Apple** (the project has no
+> paid Apple Developer membership). macOS Gatekeeper therefore blocks the app the
+> **first** time you open it. This is a one-time step.
+
+After moving the app to **Applications**, do **one** of the following:
+
+- **macOS 14 (Sonoma) and earlier** — right-click (or Control-click) **FocalPlanner**
+  in Applications → **Open**, then confirm **Open** in the dialog.
+- **macOS 15 (Sequoia)** — double-click it once (it gets blocked), then open
+  **System Settings → Privacy & Security**, scroll to the FocalPlanner notice and
+  click **Open Anyway**.
+- **Terminal (any version)** — remove the download quarantine flag:
+  ```bash
+  xattr -dr com.apple.quarantine /Applications/FocalPlanner.app
+  ```
+
+Once approved, the app launches normally from then on. On first run, grant
+**Calendar** and **Reminders** access when prompted (or later via
+System Settings → Privacy & Security).
+
+### Why the extra step?
+Notarization requires a paid Apple Developer account. Everything else
+(signing, distribution, the app itself) works without it — only this first-launch
+approval is affected.
+
 ## Features
 
 - Apple-style **sidebar + lists** layout: calendars and reminder lists on the
@@ -65,6 +96,26 @@ Sync is entirely optional — the app works fully without connecting GitHub.
 ```bash
 npm run tauri build    # produces a .app bundle in src-tauri/target/release/bundle
 ```
+
+### Cutting a release
+
+A GitHub Actions workflow (`.github/workflows/release.yml`) builds a **universal,
+ad-hoc-signed `.dmg`** and attaches it to a GitHub Release. To publish:
+
+1. Bump the version in `package.json`, `src-tauri/tauri.conf.json` and
+   `src-tauri/Cargo.toml` (keep them in sync), commit, and push.
+2. Tag the commit and push the tag:
+   ```bash
+   git tag v0.4.0
+   git push origin v0.4.0
+   ```
+3. The workflow builds on a macOS runner and creates a **draft** Release with the
+   DMG attached. Review it on GitHub and click **Publish release**.
+
+No Apple Developer secrets are required. The build is signed ad-hoc (`APPLE_SIGNING_IDENTITY: "-"`)
+and **not notarized**, so the first-launch Gatekeeper step above applies. To enable
+notarization later, add the `APPLE_*` secrets to the repo and the workflow will use them.
+You can also run the workflow manually from the **Actions** tab (`workflow_dispatch`).
 
 ## Useful checks
 

@@ -1,0 +1,61 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  release:
+    # Apple Silicon runner with full Xcode (needed for the EventKit Swift bridge).
+    runs-on: macos-14
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "src-tauri -> target"
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build and publish (ad-hoc signed universal DMG)
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Ad-hoc code signature — no Apple Developer account required. The app is
+          # NOT notarized, so users must bypass Gatekeeper on first launch (README).
+          APPLE_SIGNING_IDENTITY: "-"
+        with:
+          # Universal binary so it runs on both Apple Silicon and Intel Macs.
+          args: --target universal-apple-darwin --bundles dmg
+          tagName: ${{ github.ref_name }}
+          releaseName: "FocalPlanner ${{ github.ref_name }}"
+          releaseDraft: true
+          prerelease: false
+          releaseBody: |
+            ## FocalPlanner ${{ github.ref_name }}
+
+            Download the `.dmg` below, open it, and drag **FocalPlanner** to **Applications**.
+
+            ### First launch (one-time Gatekeeper step)
+            This build is ad-hoc signed but **not notarized by Apple**, so macOS blocks it the first time. Do one of:
+
+            - **macOS 14 and earlier:** right-click the app in Applications → **Open** → **Open**.
+            - **macOS 15 (Sequoia):** double-click once (it will be blocked), then go to **System Settings → Privacy & Security** and click **Open Anyway**.
+            - **Terminal (any version):** `xattr -dr com.apple.quarantine /Applications/FocalPlanner.app`
+
+            After this one-time step the app opens normally. On first run, grant Calendar and Reminders access when prompted.
