@@ -69,6 +69,7 @@ import { ReminderInspector } from "@/components/ReminderInspector";
 import { AreasDialog } from "@/components/AreasDialog";
 import { SettingsDialog, type Pane as SettingsPane } from "@/components/SettingsDialog";
 import { ConfirmDialog, type ConfirmOptions } from "@/components/ConfirmDialog";
+import { FeatureTour } from "@/components/FeatureTour";
 import { GitHubConnectDialog } from "@/components/GitHubConnectDialog";
 import { AboutDialog } from "@/components/AboutDialog";
 
@@ -170,6 +171,29 @@ function Planner() {
   const [areasOpen, setAreasOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsPane, setSettingsPane] = useState<SettingsPane>("general");
+
+  // Feature tour — auto-shown once per machine (localStorage, not synced).
+  const TOUR_KEY = "focalplanner.tourSeen";
+  const [tourOpen, setTourOpen] = useState(false);
+  useEffect(() => {
+    try {
+      if (!localStorage.getItem(TOUR_KEY)) setTourOpen(true);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  const closeTour = () => {
+    setTourOpen(false);
+    try {
+      localStorage.setItem(TOUR_KEY, "1");
+    } catch {
+      /* ignore */
+    }
+  };
+  const replayTour = () => {
+    setSettingsOpen(false);
+    setTourOpen(true);
+  };
   const openSettings = (pane: SettingsPane = "general") => {
     setSettingsPane(pane);
     setSettingsOpen(true);
@@ -1084,6 +1108,7 @@ function Planner() {
         lists={calendars.data?.reminderLists ?? []}
         sync={sync}
         initialPane={settingsPane}
+        onReplayTour={replayTour}
         onConnectClick={() => {
           setSettingsOpen(false);
           setConnectOpen(true);
@@ -1117,6 +1142,8 @@ function Planner() {
       )}
 
       <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />
+
+      <FeatureTour open={tourOpen} onClose={closeTour} />
 
       {remDrag && (
         <div

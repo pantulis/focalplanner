@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Check, Cloud, Loader2, Lock } from "lucide-react";
+import { Check, Cloud, Loader2, Lock, Sparkles } from "lucide-react";
 import type { CalendarDto } from "@/lib/api";
 import type { SyncController } from "@/lib/sync";
 import { Button } from "@/components/ui/button";
@@ -35,6 +35,8 @@ interface Props {
   onConnectClick: () => void;
   /** Pane to show when the dialog is (re)opened. */
   initialPane?: Pane;
+  /** Re-run the first-launch feature tour. */
+  onReplayTour: () => void;
 }
 
 const PANES: { id: Pane; label: string }[] = [
@@ -80,6 +82,7 @@ export function SettingsDialog({
   sync,
   onConnectClick,
   initialPane,
+  onReplayTour,
 }: Props) {
   const [pane, setPane] = useState<Pane>("general");
   const [passphrase, setPassphrase] = useState("");
@@ -204,6 +207,15 @@ export function SettingsDialog({
                     value={settings.weekendEnd}
                     onChange={(h) => onChange({ weekendEnd: h })}
                   />
+                </div>
+              </div>
+
+              <div className="space-y-1.5 border-t border-border pt-4">
+                <Label>Feature tour</Label>
+                <div>
+                  <Button variant="outline" size="sm" onClick={onReplayTour}>
+                    <Sparkles className="size-4" /> Replay tour
+                  </Button>
                 </div>
               </div>
             </div>
