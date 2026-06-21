@@ -161,6 +161,23 @@ export function SettingsDialog({
               </div>
 
               <div className="space-y-1.5">
+                <Label>Scheduling context for inspector view</Label>
+                <Select
+                  value={settings.inspectorContextHours}
+                  onChange={(e) =>
+                    onChange({ inspectorContextHours: Number(e.target.value) })
+                  }
+                  className="h-8 w-40 text-xs"
+                >
+                  {[1, 2, 3, 4, 6].map((h) => (
+                    <option key={h} value={h}>
+                      ± {h} hour{h > 1 ? "s" : ""}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
                 <Label>Workday hours</Label>
                 <div className="flex items-center gap-2">
                   <HourSelect

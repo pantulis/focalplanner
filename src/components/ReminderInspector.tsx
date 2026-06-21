@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { parseISO } from "date-fns";
 import { Circle, CircleCheck, Repeat, Trash2, X } from "lucide-react";
 import type { CalendarDto, ReminderDto, ReminderInput } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -6,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { DateTimePicker } from "@/components/ui/date-time-picker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MiniPlanner } from "@/components/MiniPlanner";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -22,6 +24,7 @@ interface Props {
   onDelete: (id: string) => void;
   onToggleComplete: (reminder: ReminderDto, completed: boolean) => void;
   weekStartsOn?: 0 | 1;
+  contextHours?: number;
   busy?: boolean;
 }
 
@@ -51,6 +54,7 @@ export function ReminderInspector({
   onDelete,
   onToggleComplete,
   weekStartsOn = 1,
+  contextHours = 2,
   busy,
 }: Props) {
   const editable = lists.filter((c) => c.editable);
@@ -233,6 +237,20 @@ export function ReminderInspector({
           />
         </div>
       </div>
+
+      {dueDate && dueHour && (
+        <div className="shrink-0 border-t border-border px-4 py-3">
+          <MiniPlanner
+            focusStart={parseISO(`${dueDate}T${dueHour}:${dueMinute || "00"}`)}
+            focusEnd={parseISO(`${dueDate}T${dueHour}:${dueMinute || "00"}`)}
+            contextHours={contextHours}
+            kind="reminder"
+            selfId={reminder?.id}
+            selfTitle={title}
+            selfColor={reminder?.color}
+          />
+        </div>
+      )}
 
       <footer className="flex items-center gap-2 border-t border-border px-4 py-3">
         {reminder?.id && (

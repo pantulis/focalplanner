@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
+import { parseISO } from "date-fns";
 import { Trash2, X } from "lucide-react";
 import type { CalendarDto, EventDto, EventInput } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { DateTimePicker } from "@/components/ui/date-time-picker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MiniPlanner } from "@/components/MiniPlanner";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { localInputToISO, toLocalInput } from "@/lib/dates";
@@ -23,6 +25,7 @@ interface Props {
   onSubmit: (input: EventInput) => void;
   onDelete: (id: string) => void;
   weekStartsOn?: 0 | 1;
+  contextHours?: number;
   busy?: boolean;
 }
 
@@ -57,6 +60,7 @@ export function EventInspector({
   onSubmit,
   onDelete,
   weekStartsOn = 1,
+  contextHours = 2,
   busy,
 }: Props) {
   const editable = calendars.filter((c) => c.editable);
@@ -231,6 +235,20 @@ export function EventInspector({
           />
         </div>
       </div>
+
+      {!allDay && startDate && startHour && endDate && endHour && (
+        <div className="shrink-0 border-t border-border px-4 py-3">
+          <MiniPlanner
+            focusStart={parseISO(`${startDate}T${startHour}:${startMinute || "00"}`)}
+            focusEnd={parseISO(`${endDate}T${endHour}:${endMinute || "00"}`)}
+            contextHours={contextHours}
+            kind="event"
+            selfId={event?.id}
+            selfTitle={title}
+            selfColor={event?.color}
+          />
+        </div>
+      )}
 
       <footer className="flex items-center gap-2 border-t border-border px-4 py-3">
         {event?.id && (

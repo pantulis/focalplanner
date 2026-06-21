@@ -1042,6 +1042,7 @@ function Planner() {
             onSubmit={submitEvent}
             onDelete={deleteEvent}
             weekStartsOn={weekStartsOn}
+            contextHours={settings.inspectorContextHours}
             busy={eventBusy}
           />
 
@@ -1059,6 +1060,7 @@ function Planner() {
               reminderMx.toggle.mutate({ id: r.id, completed }, { onError: fail })
             }
             weekStartsOn={weekStartsOn}
+            contextHours={settings.inspectorContextHours}
             busy={reminderBusy}
           />
         </div>

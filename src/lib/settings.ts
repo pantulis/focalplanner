@@ -15,6 +15,8 @@ export interface Settings {
   theme: string;
   font: string;
   scale: number;
+  /** Hours of timeline shown before/after an item in the inspector mini-planner. */
+  inspectorContextHours: number;
   /** Custom order of areas of focus in the sidebar (area ids). */
   areaOrder: string[];
   /** GitHub sync bookkeeping (not secret; the token lives in the Keychain). */
@@ -35,6 +37,7 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: "light",
   font: "system",
   scale: 1,
+  inspectorContextHours: 2,
   areaOrder: [],
   autoSync: true,
 };
