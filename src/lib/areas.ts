@@ -22,7 +22,7 @@ export interface Area {
 export const AREAS: Area[] = [
   { id: "personal", label: "Personal", color: "#8b5cf6", icon: User },
   { id: "work", label: "Work", color: "#3b82f6", icon: Briefcase },
-  { id: "health", label: "Health", color: "#10b981", icon: HeartPulse },
+  { id: "health", label: "Health & Fitness", color: "#10b981", icon: HeartPulse },
   { id: "finance", label: "Finance", color: "#f59e0b", icon: Wallet },
   { id: "family", label: "Family", color: "#ef4444", icon: Home },
   { id: "learning", label: "Learning", color: "#06b6d4", icon: GraduationCap },
