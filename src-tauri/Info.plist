@@ -12,5 +12,8 @@
 	<string>FocalPlanner displays and manages your calendar events.</string>
 	<key>NSRemindersUsageDescription</key>
 	<string>FocalPlanner displays and manages your reminders.</string>
+	<!-- Lets FocalPlanner open Apple Calendar to respond to invitations -->
+	<key>NSAppleEventsUsageDescription</key>
+	<string>FocalPlanner opens Apple Calendar so you can respond to invitations.</string>
 </dict>
 </plist>

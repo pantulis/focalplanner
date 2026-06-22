@@ -12,6 +12,7 @@ import {
   CalendarX2,
   CircleCheck,
   Clock,
+  Copy,
   ListTodo,
   Moon,
   Pencil,
@@ -43,8 +44,10 @@ import {
   viewLabel,
   viewRange,
   clamp,
+  clampZoom,
   DAY_MINUTES,
   HOUR_HEIGHT,
+  ZOOM_STEP,
   type PlannerView,
 } from "@/lib/planner";
 import { AREAS, areaMembers, useAreaConfig } from "@/lib/areas";
@@ -67,11 +70,13 @@ import { PlannerToolbar } from "@/components/PlannerToolbar";
 import { TimeGridView } from "@/components/TimeGridView";
 import { FocusBoard } from "@/components/FocusBoard";
 import { dueForSector, sectorLabel, type Sector } from "@/lib/sectors";
+import { cloneGroups, cloneKey } from "@/lib/clones";
 import { ReminderList, type StatusFilter } from "@/components/ReminderList";
 import { EventInspector } from "@/components/EventInspector";
 import { ReminderInspector } from "@/components/ReminderInspector";
 import { SettingsDialog, type Pane as SettingsPane } from "@/components/SettingsDialog";
 import { ConfirmDialog, type ConfirmOptions } from "@/components/ConfirmDialog";
+import { CloneDialog, type CloneDialogState } from "@/components/CloneDialog";
 import { FeatureTour } from "@/components/FeatureTour";
 import { GitHubConnectDialog } from "@/components/GitHubConnectDialog";
 import { AboutDialog } from "@/components/AboutDialog";
@@ -167,6 +172,8 @@ function Planner() {
   const [section, setSection] = useState<Section>("today");
   const [anchor, setAnchor] = useState<Date>(() => new Date());
   const [activeArea, setActiveArea] = useState<string>("all");
+  // Ephemeral vertical zoom of the time grid (1 = 100%); resets on relaunch.
+  const [gridZoom, setGridZoom] = useState(1);
   // Reminder list/status filters remembered per area of focus.
   const [areaFilters, setAreaFilters] = useState<
     Record<string, { list: string; status: StatusFilter }>
@@ -178,6 +185,10 @@ function Planner() {
       [activeArea]: { ...(prev[activeArea] ?? { list: "all", status: "today" }), ...patch },
     }));
   const [showReminders, setShowReminders] = useState(true);
+  // User-resized heights of the time grid's all-day sections. Session-only (not a
+  // saved preference) but kept across areas and the daily/weekly views; null = auto.
+  const [allDayEventsHeight, setAllDayEventsHeight] = useState<number | null>(null);
+  const [allDayTasksHeight, setAllDayTasksHeight] = useState<number | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsPane, setSettingsPane] = useState<SettingsPane>("general");
 
@@ -214,9 +225,11 @@ function Planner() {
     () => viewRange(view, anchor, weekStartsOn),
     [view, anchor, weekStartsOn],
   );
+  // Per-area weekly preference: show the 5-day work week (Mon–Fri).
+  const workWeek = view === "week" && !!settings.areaWorkWeek?.[activeArea];
   const days = useMemo(
-    () => viewDays(view, anchor, weekStartsOn),
-    [view, anchor, weekStartsOn],
+    () => viewDays(view, anchor, weekStartsOn, workWeek),
+    [view, anchor, weekStartsOn, workWeek],
   );
 
   // Calendars / lists not hidden via Settings.
@@ -234,6 +247,25 @@ function Planner() {
       ),
     [calendars.data, settings.ignoredListIds],
   );
+
+  // Calendars / lists assigned to any Area of Focus, excluding hidden ones.
+  // Used to scope the inspector's "Schedule context" (conflict) view.
+  const contextCalendarIds = useMemo(() => {
+    const ignored = new Set(settings.ignoredCalendarIds);
+    const ids = new Set<string>();
+    for (const m of Object.values(areaConfig)) {
+      for (const id of m.calendarIds) if (!ignored.has(id)) ids.add(id);
+    }
+    return [...ids];
+  }, [areaConfig, settings.ignoredCalendarIds]);
+  const contextListIds = useMemo(() => {
+    const ignored = new Set(settings.ignoredListIds);
+    const ids = new Set<string>();
+    for (const m of Object.values(areaConfig)) {
+      for (const id of m.listIds) if (!ignored.has(id)) ids.add(id);
+    }
+    return [...ids];
+  }, [areaConfig, settings.ignoredListIds]);
 
   const events = useEvents(range.start, range.end, undefined, true);
   const reminders = useReminders(undefined, settings.showCompletedReminders, true);
@@ -261,30 +293,37 @@ function Planner() {
 
   function updateEventTimes(event: EventDto, start: string, end: string) {
     if (!event.id) return;
-    const id = event.id;
-    setPendingTimes((p) => ({ ...p, [id]: { start, end } }));
-    eventMx.update.mutate(
-      {
-        id,
-        title: event.title,
-        start,
-        end,
-        allDay: event.allDay,
-        calendarId: event.calendarId,
-        notes: event.notes,
-        location: event.location,
-      },
-      {
-        onError: (e) => {
-          fail(e);
-          setPendingTimes((p) => {
-            const next = { ...p };
-            delete next[id];
-            return next;
-          });
+    // Moving a clone moves all its copies in the other calendars together.
+    const members = (eventClones.get(cloneKey(event)) ?? [event]).filter((m) => m.id);
+    setPendingTimes((p) => {
+      const next = { ...p };
+      for (const m of members) next[m.id!] = { start, end };
+      return next;
+    });
+    for (const m of members) {
+      eventMx.update.mutate(
+        {
+          id: m.id!,
+          title: m.title,
+          start,
+          end,
+          allDay: m.allDay,
+          calendarId: m.calendarId,
+          notes: m.notes,
+          location: m.location,
         },
-      },
-    );
+        {
+          onError: (e) => {
+            fail(e);
+            setPendingTimes((p) => {
+              const next = { ...p };
+              delete next[m.id!];
+              return next;
+            });
+          },
+        },
+      );
+    }
   }
 
   // Optimistic due overrides for dragged reminders.
@@ -353,7 +392,7 @@ function Planner() {
       if (!Number.isNaN(dayIndex) && days[dayIndex]) {
         const top = col.getBoundingClientRect().top;
         const minute = clamp(
-          Math.round((((y - top) / HOUR_HEIGHT) * 60) / REM_SNAP) * REM_SNAP,
+          Math.round((((y - top) / (HOUR_HEIGHT * gridZoom)) * 60) / REM_SNAP) * REM_SNAP,
           0,
           DAY_MINUTES - REM_SNAP,
         );
@@ -426,6 +465,18 @@ function Planner() {
       return true;
     });
   }, [effectiveEvents, activeArea, areaConfig, settings.ignoredCalendarIds]);
+
+  // The same event copied across calendars (matched by name+time). Computed over
+  // every unhidden copy regardless of Area of Focus (only hidden calendars are
+  // ignored), so the zebra rendering, synced move/drag, and the confirmation
+  // dialogs all account for copies living in other-area calendars.
+  const eventClones = useMemo(() => {
+    const ignored = new Set(settings.ignoredCalendarIds);
+    const unhidden = (effectiveEvents ?? []).filter(
+      (e) => !(e.calendarId != null && ignored.has(e.calendarId)),
+    );
+    return cloneGroups(unhidden);
+  }, [effectiveEvents, settings.ignoredCalendarIds]);
 
   const filteredReminders = useMemo(() => {
     if (!effectiveReminders) return effectiveReminders;
@@ -539,11 +590,45 @@ function Planner() {
     setSection(s);
   }
 
+  // Native menu (View / Reminders) actions, dispatched from `menu-action` events.
+  // A ref keeps the latest area state for the once-registered listener.
+  const menuStateRef = useRef({ activeArea, availableAreas });
+  menuStateRef.current = { activeArea, availableAreas };
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    listen<string>("menu-action", (e) => {
+      const id = e.payload;
+      if (id === "view-daily") selectSection("today");
+      else if (id === "view-weekly") selectSection("weekly");
+      else if (id === "view-planner") selectSection("planner");
+      else if (id === "area-next" || id === "area-prev") {
+        const { activeArea: aa, availableAreas: areas } = menuStateRef.current;
+        const cycle = ["all", ...areas.map((a) => a.id)];
+        const i = Math.max(0, cycle.indexOf(aa));
+        const dir = id === "area-next" ? 1 : -1;
+        setActiveArea(cycle[(i + dir + cycle.length) % cycle.length]);
+      } else if (id.startsWith("filter-")) {
+        const status = id.slice("filter-".length) as StatusFilter;
+        const aa = menuStateRef.current.activeArea;
+        setAreaFilters((prev) => ({
+          ...prev,
+          [aa]: { ...(prev[aa] ?? { list: "all", status: "today" }), status },
+        }));
+        setShowReminders(true);
+      }
+    }).then((un) => {
+      unlisten = un;
+    });
+    return () => unlisten?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // ── Context menu actions ──────────────────────────────────────────────
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuNode[] } | null>(
     null,
   );
   const [confirm, setConfirm] = useState<ConfirmOptions | null>(null);
+  const [cloneDialog, setCloneDialog] = useState<CloneDialogState | null>(null);
 
   function eligible(items: CalendarDto[] | undefined, ids: string[]): CalendarDto[] {
     const editable = (items ?? []).filter((c) => c.editable);
@@ -566,6 +651,22 @@ function Planner() {
         location: event.location,
       },
       { onSuccess: () => toast.success("Event moved"), onError: fail },
+    );
+  }
+
+  // Copy = create a duplicate in another calendar (the pair then renders as a clone).
+  function copyEventToCalendar(event: EventDto, calendarId: string) {
+    eventMx.create.mutate(
+      {
+        title: event.title,
+        start: event.start,
+        end: event.end,
+        allDay: event.allDay,
+        calendarId,
+        notes: event.notes,
+        location: event.location,
+      },
+      { onSuccess: () => toast.success("Event copied"), onError: fail },
     );
   }
 
@@ -701,6 +802,17 @@ function Planner() {
     );
     return [
       { id: "edit", label: "Edit…", icon: Pencil, onSelect: () => openEventEditor(event) },
+      ...(event.needsResponse
+        ? [
+            {
+              id: "rsvp",
+              label: "Respond in Calendar",
+              icon: CalendarIcon,
+              separatorBefore: true,
+              onSelect: () => api.openCalendar(event.start.slice(0, 10)),
+            },
+          ]
+        : []),
       {
         id: "move",
         label: "Move to Calendar",
@@ -714,6 +826,18 @@ function Planner() {
           (id) => moveEventToCalendar(event, id),
         ),
       },
+      {
+        id: "copy",
+        label: "Clone to Calendar",
+        icon: Copy,
+        children: moveTargetNodes(
+          cals,
+          { id: event.calendarId, title: event.calendarTitle, color: event.color },
+          "copy",
+          "No calendars in area",
+          (id) => copyEventToCalendar(event, id),
+        ),
+      },
       rescheduleNode((dt) => rescheduleEvent(event, dt), anchor),
       {
         id: "delete",
@@ -721,15 +845,7 @@ function Planner() {
         icon: Trash2,
         danger: true,
         separatorBefore: true,
-        onSelect: () =>
-          event.id &&
-          setConfirm({
-            title: "Delete event?",
-            description: `“${event.title}” will be removed from your calendar.`,
-            confirmLabel: "Delete",
-            destructive: true,
-            onConfirm: () => deleteEvent(event.id!),
-          }),
+        onSelect: () => confirmDeleteEvent(event),
       },
     ];
   }
@@ -816,27 +932,66 @@ function Planner() {
 
   // Drag-to-create: ask whether to make an event or a reminder.
   // Right-click an empty planner slot → create an event in an area calendar.
-  function openEmptyEventMenu(e: React.MouseEvent, start: Date) {
-    e.preventDefault();
+  // Reminder-list submenu nodes. When a list is selected in the sidebar filter,
+  // it leads (with a "Filtered" pill) and a separator divides it from the rest.
+  // Put `leadId` first (tagged with `pill`) and divide it from the rest with a
+  // separator; falls back to plain order when there's no lead.
+  function leadFirstNodes(
+    items: CalendarDto[],
+    leadId: string | undefined,
+    pill: string,
+    node: (c: CalendarDto, extra?: Partial<MenuNode>) => MenuNode,
+  ): MenuNode[] {
+    const lead = leadId ? items.find((c) => c.id === leadId) : undefined;
+    if (!lead) return items.map((c) => node(c));
+    const rest = items.filter((c) => c.id !== lead.id);
+    return [
+      node(lead, { pill }),
+      ...rest.map((c, i) => node(c, i === 0 ? { separatorBefore: true } : undefined)),
+    ];
+  }
+
+  function reminderListNodes(onPick: (listId: string) => void): MenuNode[] {
+    if (!eligibleLists.length) {
+      return [{ id: "none", label: "No lists in this area", disabled: true }];
+    }
+    const node = (c: CalendarDto, extra?: Partial<MenuNode>): MenuNode => ({
+      id: `list-${c.id}`,
+      label: c.title,
+      colorDot: c.color,
+      onSelect: () => onPick(c.id),
+      ...extra,
+    });
+    // A sidebar list filter leads (with "Filtered"); otherwise the area default does.
+    const filteredId =
+      reminderFilter.list !== "all" ? reminderFilter.list : undefined;
+    return leadFirstNodes(
+      eligibleLists,
+      filteredId ?? areaDefaultListId,
+      filteredId ? "Filtered" : "DEFAULT",
+      node,
+    );
+  }
+
+  // Menu asking "event or reminder" for a time range, then opening the editor
+  // pre-filled with [start, end] (events) or `start` as the due (reminders).
+  function showCreateMenu(start: Date, end: Date, x: number, y: number) {
+    const calNode = (c: CalendarDto, extra?: Partial<MenuNode>): MenuNode => ({
+      id: `new-cal-${c.id}`,
+      label: c.title,
+      colorDot: c.color,
+      onSelect: () => openEventEditor(null, start, end, c.id),
+      ...extra,
+    });
     const eventChildren: MenuNode[] = eligibleCalendars.length
-      ? eligibleCalendars.map((c) => ({
-          id: `new-cal-${c.id}`,
-          label: c.title,
-          colorDot: c.color,
-          onSelect: () => openEventEditor(null, start, addMinutes(start, 60), c.id),
-        }))
+      ? leadFirstNodes(eligibleCalendars, areaDefaultCalendarId, "DEFAULT", calNode)
       : [{ id: "none", label: "No calendars in this area", disabled: true }];
-    const reminderChildren: MenuNode[] = eligibleLists.length
-      ? eligibleLists.map((c) => ({
-          id: `new-list-${c.id}`,
-          label: c.title,
-          colorDot: c.color,
-          onSelect: () => openReminderEditor(null, toLocalDateTime(start), c.id),
-        }))
-      : [{ id: "none", label: "No lists in this area", disabled: true }];
+    const reminderChildren = reminderListNodes((id) =>
+      openReminderEditor(null, toLocalDateTime(start), id),
+    );
     setMenu({
-      x: e.clientX,
-      y: e.clientY,
+      x,
+      y,
       items: [
         { id: "create-event", label: "Create event in", icon: CalendarIcon, children: eventChildren },
         {
@@ -850,17 +1005,15 @@ function Planner() {
     });
   }
 
+  function openEmptyEventMenu(e: React.MouseEvent, start: Date) {
+    e.preventDefault();
+    showCreateMenu(start, addMinutes(start, 60), e.clientX, e.clientY);
+  }
+
   // Right-click an empty reminders area → create a reminder in an area list.
   function openEmptyReminderMenu(e: React.MouseEvent) {
     e.preventDefault();
-    const children: MenuNode[] = eligibleLists.length
-      ? eligibleLists.map((c) => ({
-          id: `new-list-${c.id}`,
-          label: c.title,
-          colorDot: c.color,
-          onSelect: () => openReminderEditor(null, null, c.id),
-        }))
-      : [{ id: "none", label: "No lists in this area", disabled: true }];
+    const children = reminderListNodes((id) => openReminderEditor(null, null, id));
     setMenu({
       x: e.clientX,
       y: e.clientY,
@@ -872,14 +1025,7 @@ function Planner() {
   function openAllDayReminderMenu(e: React.MouseEvent, day: Date) {
     e.preventDefault();
     const due = format(day, "yyyy-MM-dd");
-    const children: MenuNode[] = eligibleLists.length
-      ? eligibleLists.map((c) => ({
-          id: `allday-list-${c.id}`,
-          label: c.title,
-          colorDot: c.color,
-          onSelect: () => openReminderEditor(null, due, c.id),
-        }))
-      : [{ id: "none", label: "No lists in this area", disabled: true }];
+    const children = reminderListNodes((id) => openReminderEditor(null, due, id));
     setMenu({
       x: e.clientX,
       y: e.clientY,
@@ -896,10 +1042,16 @@ function Planner() {
 
   function submitEvent(input: EventInput) {
     const mx = input.id ? eventMx.update : eventMx.create;
+    // Editing a clone only changes the clicked copy; warn afterwards.
+    const original = input.id ? eventDialog.event : null;
+    const group = original ? eventClones.get(cloneKey(original)) : undefined;
     mx.mutate(input, {
       onSuccess: () => {
         toast.success(input.id ? "Event updated" : "Event created");
         setEventDialog({ open: false, event: null, initialStart: null, initialEnd: null, initialCalendarId: null });
+        if (original && group && group.length >= 2) {
+          setCloneDialog({ mode: "edit-notice", event: original, group });
+        }
       },
       onError: fail,
     });
@@ -912,6 +1064,29 @@ function Planner() {
         setEventDialog({ open: false, event: null, initialStart: null, initialEnd: null, initialCalendarId: null });
       },
       onError: fail,
+    });
+  }
+
+  function deleteEventsByIds(ids: string[]) {
+    for (const id of ids) eventMx.remove.mutate(id, { onError: fail });
+    toast.success("Events deleted");
+    setEventDialog({ open: false, event: null, initialStart: null, initialEnd: null, initialCalendarId: null });
+  }
+
+  // Delete an event — for a clone, ask whether to remove one copy or all of them.
+  function confirmDeleteEvent(event: EventDto) {
+    if (!event.id) return;
+    const group = eventClones.get(cloneKey(event));
+    if (group && group.length >= 2) {
+      setCloneDialog({ mode: "delete", event, group });
+      return;
+    }
+    setConfirm({
+      title: "Delete event?",
+      description: `“${event.title}” will be removed from your calendar.`,
+      confirmLabel: "Delete",
+      destructive: true,
+      onConfirm: () => deleteEvent(event.id!),
     });
   }
 
@@ -971,6 +1146,9 @@ function Planner() {
       }
 
       if (typing) return;
+      // Native menu accelerators (Cmd/Ctrl based) handle the modified shortcuts;
+      // the plain-key shortcuts below should not also fire for them.
+      if (e.metaKey || e.ctrlKey) return;
 
       switch (e.key) {
         case "n":
@@ -1025,6 +1203,21 @@ function Planner() {
     areaMembers(areaConfig, activeArea).listIds,
   );
 
+  // Per-area defaults that lead the create menus/inspector. Skipped in "All Areas",
+  // and (for lists) when a reminder list is filtered; a stale/hidden id is ignored.
+  const areaDefaultCalendarId =
+    activeArea !== "all"
+      ? eligibleCalendars.find(
+          (c) => c.id === settings.areaDefaultCalendarId?.[activeArea],
+        )?.id
+      : undefined;
+  const areaDefaultListId =
+    activeArea !== "all" && reminderFilter.list === "all"
+      ? eligibleLists.find(
+          (c) => c.id === settings.areaDefaultListId?.[activeArea],
+        )?.id
+      : undefined;
+
   // Reminder groups available to the panel's group filter (scoped to the area).
   const availableGroups = useMemo(() => {
     if (activeArea === "all") return visibleLists;
@@ -1063,6 +1256,20 @@ function Planner() {
           label={viewLabel(view, anchor, weekStartsOn)}
           navDisabled={isPlanner}
           showReminders={showReminders}
+          weekView={section === "weekly"}
+          workWeek={workWeek}
+          onToggleWorkWeek={() =>
+            updateSettings({
+              areaWorkWeek: {
+                ...(settings.areaWorkWeek ?? {}),
+                [activeArea]: !settings.areaWorkWeek?.[activeArea],
+              },
+            })
+          }
+          zoom={gridZoom}
+          onZoomIn={() => setGridZoom((z) => clampZoom(z + ZOOM_STEP))}
+          onZoomOut={() => setGridZoom((z) => clampZoom(z - ZOOM_STEP))}
+          onResetZoom={() => setGridZoom(1)}
           onPrev={() => setAnchor((a) => navigate(view, a, -1))}
           onNext={() => setAnchor((a) => navigate(view, a, 1))}
           onToday={() => setAnchor(new Date())}
@@ -1100,6 +1307,8 @@ function Planner() {
                 days={days}
                 events={filteredEvents}
                 reminders={filteredReminders}
+                zoom={gridZoom}
+                onZoomChange={setGridZoom}
                 onEditEvent={(ev) => openEventEditor(ev)}
                 onEditReminder={(r) => openReminderEditor(r)}
                 onToggleReminder={(r, completed) =>
@@ -1107,6 +1316,8 @@ function Planner() {
                   reminderMx.toggle.mutate({ id: r.id, completed }, { onError: fail })
                 }
                 onEmptyContextMenu={openEmptyEventMenu}
+                cloneGroups={eventClones}
+                onCreateRange={(start, end, x, y) => showCreateMenu(start, end, x, y)}
                 onUpdateTimes={updateEventTimes}
                 onUpdateReminderDue={updateReminderDue}
                 onEventContextMenu={openEventMenu}
@@ -1127,6 +1338,10 @@ function Planner() {
                   weekendStart: settings.weekendStart,
                   weekendEnd: settings.weekendEnd,
                 }}
+                allDayEventsHeight={allDayEventsHeight}
+                onAllDayEventsHeight={setAllDayEventsHeight}
+                allDayTasksHeight={allDayTasksHeight}
+                onAllDayTasksHeight={setAllDayTasksHeight}
               />
             )}
 
@@ -1137,11 +1352,14 @@ function Planner() {
               initialStart={eventDialog.initialStart}
               initialEnd={eventDialog.initialEnd}
               initialCalendarId={eventDialog.initialCalendarId}
+              defaultCalendarId={areaDefaultCalendarId}
               calendars={eligibleCalendars}
               onSubmit={submitEvent}
-              onDelete={deleteEvent}
+              onDelete={() => eventDialog.event && confirmDeleteEvent(eventDialog.event)}
               weekStartsOn={weekStartsOn}
               contextHours={settings.inspectorContextHours}
+              contextCalendarIds={contextCalendarIds}
+              contextListIds={contextListIds}
               busy={eventBusy}
             />
 
@@ -1151,6 +1369,7 @@ function Planner() {
               reminder={reminderDialog.reminder}
               initialDue={reminderDialog.initialDue}
               initialListId={reminderDialog.initialListId}
+              defaultListId={areaDefaultListId}
               lists={eligibleLists}
               onSubmit={submitReminder}
               onDelete={deleteReminder}
@@ -1160,6 +1379,8 @@ function Planner() {
               }
               weekStartsOn={weekStartsOn}
               contextHours={settings.inspectorContextHours}
+              contextCalendarIds={contextCalendarIds}
+              contextListIds={contextListIds}
               busy={reminderBusy}
             />
           </div>
@@ -1238,6 +1459,19 @@ function Planner() {
       )}
 
       <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />
+
+      <CloneDialog
+        state={cloneDialog}
+        onClose={() => setCloneDialog(null)}
+        onDeleteOne={(event) => {
+          if (event.id) deleteEvent(event.id);
+          setCloneDialog(null);
+        }}
+        onDeleteAll={(group) => {
+          deleteEventsByIds(group.map((e) => e.id).filter((id): id is string => !!id));
+          setCloneDialog(null);
+        }}
+      />
 
       <FeatureTour open={tourOpen} onClose={closeTour} />
 

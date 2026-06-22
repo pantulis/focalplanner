@@ -21,7 +21,8 @@ interface Props {
 }
 
 const HOURS = Array.from({ length: 24 }, (_, h) => String(h).padStart(2, "0"));
-const MINUTES = Array.from({ length: 60 }, (_, m) => String(m).padStart(2, "0"));
+// Quarter-hour granularity keeps the picker quick to use.
+const MINUTES = ["00", "15", "30", "45"];
 
 /**
  * Friendly due-date control: a button showing the formatted date/time that
@@ -38,6 +39,10 @@ export function DateTimePicker({
   weekStartsOn = 1,
 }: Props) {
   const [open, setOpen] = useState(false);
+
+  // Keep an existing off-quarter minute (e.g. a pre-existing :37) selectable.
+  const minuteOptions =
+    minute && !MINUTES.includes(minute) ? [...MINUTES, minute].sort() : MINUTES;
 
   const label = date
     ? hour
@@ -103,7 +108,7 @@ export function DateTimePicker({
           aria-label="Minute"
           disabled={!date || !hour}
         >
-          {MINUTES.map((m) => (
+          {minuteOptions.map((m) => (
             <option key={m} value={m}>
               {m}
             </option>

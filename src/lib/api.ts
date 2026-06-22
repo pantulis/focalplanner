@@ -29,6 +29,45 @@ export interface CalendarSets {
   reminderLists: CalendarDto[];
 }
 
+export type ParticipantStatus =
+  | "accepted"
+  | "declined"
+  | "tentative"
+  | "pending"
+  | "unknown"
+  | "delegated"
+  | "completed"
+  | "inProcess";
+
+export interface ParticipantDto {
+  name: string | null;
+  status: ParticipantStatus;
+  isCurrentUser: boolean;
+  isOrganizer: boolean;
+}
+
+export type RecurrenceFrequency = "daily" | "weekly" | "monthly" | "yearly";
+
+export interface RecurrenceDto {
+  frequency: RecurrenceFrequency;
+  interval: number;
+  /** Weekdays for weekly rules (0 = Sunday … 6 = Saturday). */
+  daysOfWeek: number[];
+  /** End date as "YYYY-MM-DD", when the rule ends on a date. */
+  endDate: string | null;
+  /** Occurrence count, when the rule ends after a number of times. */
+  count: number | null;
+}
+
+/** Recurrence as submitted from an inspector; null clears any rule. */
+export interface RecurrenceInput {
+  frequency: RecurrenceFrequency;
+  interval: number;
+  daysOfWeek?: number[];
+  endDate?: string | null;
+  count?: number | null;
+}
+
 export interface EventDto {
   id: string | null;
   title: string;
@@ -42,6 +81,11 @@ export interface EventDto {
   location: string | null;
   url: string | null;
   recurring: boolean;
+  recurrence: RecurrenceDto | null;
+  /** Current user is an attendee who hasn't responded (invitation awaiting RSVP). */
+  needsResponse: boolean;
+  /** Attendees (organizer first when known) with their RSVP status. */
+  participants: ParticipantDto[];
 }
 
 export interface ReminderDto {
@@ -49,6 +93,7 @@ export interface ReminderDto {
   title: string;
   completed: boolean;
   recurring: boolean;
+  recurrence: RecurrenceDto | null;
   due: string | null; // YYYY-MM-DDTHH:MM or YYYY-MM-DD
   priority: number;
   listId: string | null;
@@ -66,6 +111,7 @@ export interface EventInput {
   calendarId?: string | null;
   notes?: string | null;
   location?: string | null;
+  recurrence?: RecurrenceInput | null;
 }
 
 export interface ReminderInput {
@@ -75,6 +121,7 @@ export interface ReminderInput {
   priority: number;
   listId?: string | null;
   notes?: string | null;
+  recurrence?: RecurrenceInput | null;
 }
 
 // ── Command wrappers ──────────────────────────────────────────────────────
@@ -108,6 +155,8 @@ export const api = {
   startChangeObserver: () => invoke<void>("start_change_observer"),
   aboutInfo: () => invoke<AboutInfo>("about_info"),
   openPrivacySettings: () => invoke<void>("open_privacy_settings"),
+  openCalendar: (date?: string | null) =>
+    invoke<void>("open_calendar", { date: date ?? null }),
 
   // Menubar tray
   trayUpdate: (title: string | null, items: TrayItemDto[]) =>

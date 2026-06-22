@@ -8,10 +8,18 @@ import {
   startOfWeek,
 } from "date-fns";
 import type { EventDto, ReminderDto } from "./api";
+import { cloneColors, cloneKey } from "./clones";
+
+const FALLBACK_COLOR = "#3b82f6";
 
 export type PlannerView = "agenda" | "day" | "week";
 
-export const HOUR_HEIGHT = 48; // px per hour in the time grid
+export const HOUR_HEIGHT = 48; // px per hour in the time grid (at 100% zoom)
+/** Vertical-zoom multiplier bounds for the time grid. */
+export const ZOOM_MIN = 0.5;
+export const ZOOM_MAX = 2.5;
+export const ZOOM_STEP = 0.25;
+export const clampZoom = (z: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z));
 export const DAY_MINUTES = 24 * 60;
 /** Visual/layout height for a (zero-duration) timed reminder. */
 export const REMINDER_SLOT_MINUTES = 30;
@@ -40,15 +48,18 @@ export function viewRange(
   return { start: s.toISOString(), end: addDays(s, 30).toISOString() };
 }
 
-/** The day columns rendered for a given view. */
+/** The day columns rendered for a given view. `workWeek` shows only Mon–Fri. */
 export function viewDays(
   view: PlannerView,
   anchor: Date,
   weekStartsOn: WeekStart = 0,
+  workWeek = false,
 ): Date[] {
   if (view === "week") {
     const s = startOfWeek(anchor, { weekStartsOn });
-    return Array.from({ length: 7 }, (_, i) => addDays(s, i));
+    const week = Array.from({ length: 7 }, (_, i) => addDays(s, i));
+    // Work week = weekdays Mon(1)–Fri(5), regardless of where the week starts.
+    return workWeek ? week.filter((d) => d.getDay() >= 1 && d.getDay() <= 5) : week;
   }
   return [startOfDay(anchor)];
 }
@@ -89,6 +100,9 @@ export interface GridBlock {
   event?: EventDto;
   continuesBefore?: boolean; // started on an earlier day (clamped)
   continuesAfter?: boolean; // ends on a later day (clamped)
+  /** Set when this block represents a clone group (same event in ≥2 calendars). */
+  cloneColors?: string[];
+  cloneEventIds?: string[];
   // reminders only:
   reminder?: ReminderDto;
   completed?: boolean;
@@ -155,32 +169,46 @@ export function dayGridBlocks(
   events: EventDto[],
   reminders: ReminderDto[],
   day: Date,
+  clones?: Map<string, EventDto[]>,
 ): GridBlock[] {
   const dayStart = startOfDay(day).getTime();
   const dayEnd = dayStart + DAY_MS;
 
-  const eventItems = events
-    .filter((e) => !e.allDay)
-    .map((e) => ({ event: e, s: parseISO(e.start).getTime(), en: parseISO(e.end).getTime() }))
-    .filter((x) => x.en > dayStart && x.s < dayEnd)
-    .map((x): GridBlock => {
-      const startMin = Math.max(0, Math.round((x.s - dayStart) / 60000));
-      let endMin = Math.min(DAY_MINUTES, Math.round((x.en - dayStart) / 60000));
-      if (endMin <= startMin) endMin = startMin + 30;
-      return {
-        kind: "event",
-        id: x.event.id ?? `${x.event.title}-${startMin}`,
-        title: x.event.title,
-        color: x.event.color,
-        startMin,
-        endMin,
-        col: 0,
-        cols: 1,
-        event: x.event,
-        continuesBefore: x.s < dayStart,
-        continuesAfter: x.en > dayEnd,
-      };
+  // Clone groups collapse to a single block; render only the first member.
+  const emittedClone = new Set<string>();
+  const eventItems: GridBlock[] = [];
+  for (const e of events) {
+    if (e.allDay) continue;
+    const s = parseISO(e.start).getTime();
+    const en = parseISO(e.end).getTime();
+    if (!(en > dayStart && s < dayEnd)) continue;
+    const key = clones ? cloneKey(e) : null;
+    const group = key ? clones!.get(key) : undefined;
+    if (group) {
+      if (emittedClone.has(key!)) continue;
+      emittedClone.add(key!);
+    }
+    const startMin = Math.max(0, Math.round((s - dayStart) / 60000));
+    let endMin = Math.min(DAY_MINUTES, Math.round((en - dayStart) / 60000));
+    if (endMin <= startMin) endMin = startMin + 30;
+    eventItems.push({
+      kind: "event",
+      id: e.id ?? `${e.title}-${startMin}`,
+      title: e.title,
+      color: e.color,
+      startMin,
+      endMin,
+      col: 0,
+      cols: 1,
+      event: e,
+      continuesBefore: s < dayStart,
+      continuesAfter: en > dayEnd,
+      cloneColors: group ? cloneColors(group, FALLBACK_COLOR) : undefined,
+      cloneEventIds: group
+        ? group.map((g) => g.id).filter((id): id is string => !!id)
+        : undefined,
     });
+  }
 
   const reminderItems = reminders
     .map((r) => ({ reminder: r, due: reminderDueDate(r) }))
@@ -232,7 +260,7 @@ export function isToday(day: Date): boolean {
 }
 
 /** Current-time offset in pixels from the top of the grid, or null if outside. */
-export function nowOffsetPx(): number {
+export function nowOffsetPx(hourHeight = HOUR_HEIGHT): number {
   const now = new Date();
-  return (now.getHours() * 60 + now.getMinutes()) * (HOUR_HEIGHT / 60);
+  return (now.getHours() * 60 + now.getMinutes()) * (hourHeight / 60);
 }

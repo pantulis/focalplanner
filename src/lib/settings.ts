@@ -37,6 +37,12 @@ export interface Settings {
   areaReviewedAt: Record<string, string>;
   /** How often (days) an area of focus becomes due for review. */
   reviewIntervalDays: number;
+  /** Per-area weekly view: true shows the 5-day work week (Mon–Fri). */
+  areaWorkWeek: Record<string, boolean>;
+  /** Default calendar per area of focus (area id → calendar id). */
+  areaDefaultCalendarId: Record<string, string>;
+  /** Default reminder list per area of focus (area id → list id). */
+  areaDefaultListId: Record<string, string>;
   /** GitHub sync bookkeeping (not secret; the token lives in the Keychain). */
   syncGistId?: string;
   syncUpdatedAt?: string;
@@ -62,6 +68,9 @@ export const DEFAULT_SETTINGS: Settings = {
   areaOrder: [],
   areaReviewedAt: {},
   reviewIntervalDays: 7,
+  areaWorkWeek: {},
+  areaDefaultCalendarId: {},
+  areaDefaultListId: {},
   autoSync: true,
 };
 

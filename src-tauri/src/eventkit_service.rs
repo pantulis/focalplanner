@@ -13,10 +13,110 @@ use std::thread;
 use eventkit::prelude::*;
 
 use crate::models::{
-    AccessStatus, CalendarDto, CalendarSets, EventDto, EventInput, ReminderDto, ReminderInput,
+    AccessStatus, CalendarDto, CalendarSets, EventDto, EventInput, ParticipantDto, RecurrenceDto,
+    RecurrenceInput, ReminderDto, ReminderInput,
 };
 
 type EkResult<T> = Result<T, EventKitError>;
+
+// ── Recurrence conversion ──────────────────────────────────────────────────
+
+fn weekday_to_num(w: EKWeekday) -> i64 {
+    match w {
+        EKWeekday::Sunday => 0,
+        EKWeekday::Monday => 1,
+        EKWeekday::Tuesday => 2,
+        EKWeekday::Wednesday => 3,
+        EKWeekday::Thursday => 4,
+        EKWeekday::Friday => 5,
+        EKWeekday::Saturday => 6,
+    }
+}
+
+fn num_to_weekday(n: i64) -> EKWeekday {
+    match n.rem_euclid(7) {
+        0 => EKWeekday::Sunday,
+        1 => EKWeekday::Monday,
+        2 => EKWeekday::Tuesday,
+        3 => EKWeekday::Wednesday,
+        4 => EKWeekday::Thursday,
+        5 => EKWeekday::Friday,
+        _ => EKWeekday::Saturday,
+    }
+}
+
+fn freq_to_str(f: EKRecurrenceFrequency) -> String {
+    match f {
+        EKRecurrenceFrequency::Daily => "daily",
+        EKRecurrenceFrequency::Weekly => "weekly",
+        EKRecurrenceFrequency::Monthly => "monthly",
+        EKRecurrenceFrequency::Yearly => "yearly",
+    }
+    .to_string()
+}
+
+fn str_to_freq(s: &str) -> EKRecurrenceFrequency {
+    match s {
+        "daily" => EKRecurrenceFrequency::Daily,
+        "monthly" => EKRecurrenceFrequency::Monthly,
+        "yearly" => EKRecurrenceFrequency::Yearly,
+        _ => EKRecurrenceFrequency::Weekly,
+    }
+}
+
+/// Build a structured location from free text. `EKEvent.location` is backed by
+/// `structuredLocation.title`, and the bridge applies `structuredLocation` after
+/// the plain `location` string on save — so to make a typed location persist we
+/// must give it a matching structured location (and `None` clears it).
+fn structured_location(loc: &Option<String>) -> Option<EKStructuredLocation> {
+    loc.as_deref()
+        .filter(|s| !s.trim().is_empty())
+        .map(|s| EKStructuredLocation::new(s))
+}
+
+/// First recurrence rule (if any) as the small DTO the frontend edits.
+fn recurrence_from_rules(rules: &[EKRecurrenceRule]) -> Option<RecurrenceDto> {
+    rules.first().map(|r| RecurrenceDto {
+        frequency: freq_to_str(r.frequency),
+        interval: r.interval,
+        days_of_week: r
+            .days_of_the_week
+            .iter()
+            .map(|d| weekday_to_num(d.day_of_the_week))
+            .collect(),
+        // Rule end dates are RFC3339; expose just the calendar date.
+        end_date: r
+            .end_date
+            .as_ref()
+            .map(|s| s.split('T').next().unwrap_or(s).to_string()),
+        count: r.occurrence_count,
+    })
+}
+
+/// Build the EventKit rule list for a create/update from the inspector input.
+/// Returns an empty vec when there is no recurrence (which clears it on save).
+fn rules_from_input(input: &Option<RecurrenceInput>) -> Vec<EKRecurrenceRule> {
+    let Some(rec) = input else {
+        return Vec::new();
+    };
+    let mut rule = EKRecurrenceRule::new(str_to_freq(&rec.frequency)).with_interval(rec.interval.max(1));
+    if rec.frequency == "weekly" && !rec.days_of_week.is_empty() {
+        rule = rule.with_days_of_the_week(
+            rec.days_of_week
+                .iter()
+                .map(|&n| EKRecurrenceDayOfWeek::new(num_to_weekday(n))),
+        );
+    }
+    if let Some(d) = &rec.end_date {
+        // Inclusive end of the chosen day, in RFC3339 as the bridge expects.
+        rule = rule.with_end_date(format!("{d}T23:59:59Z"));
+    } else if let Some(c) = rec.count {
+        if c > 0 {
+            rule = rule.with_occurrence_count(c);
+        }
+    }
+    vec![rule]
+}
 
 type Job = Box<dyn FnOnce(&EKEventStore) + Send>;
 
@@ -149,6 +249,22 @@ fn event_to_dto(e: EKEvent) -> EventDto {
         ),
         None => (e.calendar_identifier.clone(), None, None),
     };
+    // An invitation awaits a response when the current user is a (non-organizer)
+    // attendee whose status isn't an explicit accept/decline/tentative. EventKit
+    // reports the unresponded status inconsistently across account types
+    // (Pending / Unknown / InProcess), so treat all three as "needs response".
+    let organizer_is_me = e.organizer.as_ref().map(|o| o.is_current_user).unwrap_or(false);
+    let needs_response = !organizer_is_me
+        && e.attendees.iter().any(|p| {
+            p.is_current_user
+                && matches!(
+                    p.participant_status,
+                    EKParticipantStatus::Pending
+                        | EKParticipantStatus::Unknown
+                        | EKParticipantStatus::InProcess
+                )
+        });
+    let participants = build_participants(&e);
     EventDto {
         id: e.identifier,
         title: e.title,
@@ -158,11 +274,57 @@ fn event_to_dto(e: EKEvent) -> EventDto {
         calendar_id,
         calendar_title,
         color,
+        recurring: e.has_recurrence_rules || !e.recurrence_rules.is_empty(),
+        recurrence: recurrence_from_rules(&e.recurrence_rules),
+        needs_response,
+        participants,
         notes: e.notes,
         location: e.location,
         url: e.url,
-        recurring: e.has_recurrence_rules || !e.recurrence_rules.is_empty(),
     }
+}
+
+fn participant_status_str(s: EKParticipantStatus) -> &'static str {
+    match s {
+        EKParticipantStatus::Accepted => "accepted",
+        EKParticipantStatus::Declined => "declined",
+        EKParticipantStatus::Tentative => "tentative",
+        EKParticipantStatus::Pending => "pending",
+        EKParticipantStatus::Delegated => "delegated",
+        EKParticipantStatus::Completed => "completed",
+        EKParticipantStatus::InProcess => "inProcess",
+        EKParticipantStatus::Unknown => "unknown",
+    }
+}
+
+/// Attendees with RSVP status; the organizer is marked (and prepended if it
+/// isn't already among the attendees).
+fn build_participants(e: &EKEvent) -> Vec<ParticipantDto> {
+    let organizer_url = e.organizer.as_ref().and_then(|o| o.url.clone());
+    let mut out: Vec<ParticipantDto> = e
+        .attendees
+        .iter()
+        .map(|p| ParticipantDto {
+            name: p.name.clone(),
+            status: participant_status_str(p.participant_status).to_string(),
+            is_current_user: p.is_current_user,
+            is_organizer: organizer_url.is_some() && organizer_url == p.url,
+        })
+        .collect();
+    if let Some(org) = &e.organizer {
+        if !out.iter().any(|p| p.is_organizer) {
+            out.insert(
+                0,
+                ParticipantDto {
+                    name: org.name.clone(),
+                    status: participant_status_str(org.participant_status).to_string(),
+                    is_current_user: org.is_current_user,
+                    is_organizer: true,
+                },
+            );
+        }
+    }
+    out
 }
 
 pub fn fetch_events(
@@ -200,8 +362,10 @@ pub fn create_event(input: EventInput) -> EkResult<()> {
         let mut event = EKEvent::new(input.title, input.start, input.end);
         event.all_day = input.all_day;
         event.notes = input.notes;
+        event.structured_location = structured_location(&input.location);
         event.location = input.location;
         event.calendar_identifier = input.calendar_id.or_else(|| default_event_calendar(store));
+        event.recurrence_rules = rules_from_input(&input.recurrence);
         store.save_event(&event, EKSpan::ThisEvent, true)
     })
 }
@@ -217,11 +381,13 @@ pub fn update_event(input: EventInput) -> EkResult<()> {
         event.end_date = input.end;
         event.all_day = input.all_day;
         event.notes = input.notes;
+        event.structured_location = structured_location(&input.location);
         event.location = input.location;
         if let Some(cal) = input.calendar_id {
             event.calendar_identifier = Some(cal);
         }
-        store.save_event(&event, EKSpan::ThisEvent, true)
+        event.recurrence_rules = rules_from_input(&input.recurrence);
+        store.save_event(&event, EKSpan::FutureEvents, true)
     })
 }
 
@@ -280,6 +446,7 @@ fn reminder_to_dto(r: EKReminder) -> ReminderDto {
     };
     ReminderDto {
         recurring: r.has_recurrence_rules || !r.recurrence_rules.is_empty(),
+        recurrence: recurrence_from_rules(&r.recurrence_rules),
         id: r.identifier,
         title: r.title,
         completed: r.is_completed,
@@ -330,6 +497,7 @@ pub fn create_reminder(input: ReminderInput) -> EkResult<()> {
         reminder.notes = input.notes;
         reminder.due_date_components = input.due.as_deref().map(parse_due);
         reminder.calendar_identifier = input.list_id.or_else(|| default_reminder_list(store));
+        reminder.recurrence_rules = rules_from_input(&input.recurrence);
         store.save_reminder(&reminder, true)
     })
 }
@@ -354,6 +522,7 @@ pub fn update_reminder(input: ReminderInput) -> EkResult<()> {
         if let Some(list) = input.list_id {
             reminder.calendar_identifier = Some(list);
         }
+        reminder.recurrence_rules = rules_from_input(&input.recurrence);
         store.save_reminder(&reminder, true)
     })
 }

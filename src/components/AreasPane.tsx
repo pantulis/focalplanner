@@ -10,7 +10,6 @@ import {
   type MemberKind,
 } from "@/lib/areas";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -18,6 +17,9 @@ interface Props {
   lists: CalendarDto[];
   config: AreaConfig;
   onChange: (next: AreaConfig) => void;
+  defaultCalendarByArea: Record<string, string>;
+  defaultListByArea: Record<string, string>;
+  onSetDefault: (areaId: string, kind: MemberKind, id: string) => void;
 }
 
 const UNGROUPED = "Other";
@@ -42,8 +44,47 @@ function ColorDot({ color }: { color: string | null }) {
   );
 }
 
+/** "Is the default" radio for a member row — enabled only when the row is a member. */
+function DefaultRadio({
+  checked,
+  disabled,
+  onSelect,
+}: {
+  checked: boolean;
+  disabled: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onSelect}
+      aria-label={checked ? "Default (click to clear)" : "Set as default"}
+      title={disabled ? "Add to this area first" : checked ? "Default" : "Set as default"}
+      className={cn(
+        "flex size-4 shrink-0 items-center justify-center rounded-full border transition-colors",
+        disabled
+          ? "cursor-not-allowed border-border/50 opacity-40"
+          : checked
+            ? "border-primary"
+            : "border-muted-foreground/40 hover:border-primary",
+      )}
+    >
+      {checked && <span className="size-2 rounded-full bg-primary" />}
+    </button>
+  );
+}
+
 /** Assign calendars and reminder lists (grouped by account) to areas of focus. */
-export function AreasPane({ calendars, lists, config, onChange }: Props) {
+export function AreasPane({
+  calendars,
+  lists,
+  config,
+  onChange,
+  defaultCalendarByArea,
+  defaultListByArea,
+  onSetDefault,
+}: Props) {
   const [activeArea, setActiveArea] = useState(AREAS[0].id);
 
   const toggle = (kind: MemberKind, id: string, on: boolean) =>
@@ -59,12 +100,28 @@ export function AreasPane({ calendars, lists, config, onChange }: Props) {
 
   function Row({ cal, kind }: { cal: CalendarDto; kind: MemberKind }) {
     const checked = isMember(config, activeArea, kind, cal.id);
+    const defaults = kind === "calendar" ? defaultCalendarByArea : defaultListByArea;
+    const isDefault = defaults[activeArea] === cal.id;
     return (
-      <label className="flex w-full cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 text-sm hover:bg-accent">
-        <Checkbox checked={checked} onCheckedChange={(c) => toggle(kind, cal.id, c)} />
-        <ColorDot color={cal.color} />
-        <span className="truncate">{cal.title}</span>
-      </label>
+      <div className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-sm hover:bg-accent">
+        <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5">
+          <Checkbox
+            checked={checked}
+            onCheckedChange={(c) => {
+              toggle(kind, cal.id, c);
+              // Dropping a member that was the default clears the default.
+              if (!c && isDefault) onSetDefault(activeArea, kind, "");
+            }}
+          />
+          <ColorDot color={cal.color} />
+          <span className="truncate">{cal.title}</span>
+        </label>
+        <DefaultRadio
+          checked={isDefault}
+          disabled={!checked}
+          onSelect={() => onSetDefault(activeArea, kind, isDefault ? "" : cal.id)}
+        />
+      </div>
     );
   }
 
@@ -111,9 +168,14 @@ export function AreasPane({ calendars, lists, config, onChange }: Props) {
   function Group({ items, kind }: { items: CalendarDto[]; kind: MemberKind }) {
     return (
       <section>
-        <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          {kind === "calendar" ? "Calendars" : "Reminder Lists"}
-        </h3>
+        <div className="mb-1.5 flex items-center justify-between gap-2 pr-2">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            {kind === "calendar" ? "Calendars" : "Reminder Lists"}
+          </h3>
+          <span className="text-[10px] uppercase tracking-wide text-muted-foreground/70">
+            Default
+          </span>
+        </div>
         {items.length === 0 && <p className="px-2 text-sm text-muted-foreground">None.</p>}
         {groupByAccount(items).map(([account, group]) => (
           <AccountGroup key={account} account={account} group={group} kind={kind} />
@@ -123,44 +185,49 @@ export function AreasPane({ calendars, lists, config, onChange }: Props) {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="space-y-1.5">
-        <Label>Area</Label>
-        <p className="text-xs text-muted-foreground">
-          A calendar or list can belong to several areas. Reorder areas by dragging them in
-          the sidebar.
-        </p>
-        <div className="flex flex-wrap gap-1.5 pt-0.5">
-          {AREAS.map((a) => {
-            const Icon = a.icon;
-            const count = membershipCount(a.id);
-            const active = activeArea === a.id;
-            return (
-              <button
-                key={a.id}
-                onClick={() => setActiveArea(a.id)}
-                className={cn(
-                  "flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors",
-                  active
-                    ? "border-primary bg-primary/10 font-medium text-foreground"
-                    : "border-border text-foreground/70 hover:bg-accent/60",
-                )}
-              >
-                <Icon className="size-3.5 shrink-0" style={{ color: a.color }} />
-                {a.label}
-                {count > 0 && <span className="text-muted-foreground">{count}</span>}
-              </button>
-            );
-          })}
-        </div>
-      </div>
+    <div className="flex gap-4">
+      {/* Master: vertical rail of areas. */}
+      <nav className="w-44 shrink-0 space-y-0.5">
+        {AREAS.map((a) => {
+          const Icon = a.icon;
+          const count = membershipCount(a.id);
+          const active = activeArea === a.id;
+          return (
+            <button
+              key={a.id}
+              onClick={() => setActiveArea(a.id)}
+              className={cn(
+                "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-sm transition-colors",
+                active
+                  ? "bg-primary/10 font-medium text-foreground"
+                  : "text-foreground/70 hover:bg-accent/60",
+              )}
+            >
+              <Icon className="size-4 shrink-0" style={{ color: a.color }} />
+              <span className="min-w-0 flex-1 truncate text-left">{a.label}</span>
+              {count > 0 && (
+                <span className="shrink-0 text-xs text-muted-foreground">{count}</span>
+              )}
+            </button>
+          );
+        })}
+      </nav>
 
-      <div className="flex gap-4 border-t border-border pt-3">
-        <div className="min-w-0 flex-1">
-          <Group items={calendars} kind="calendar" />
-        </div>
-        <div className="min-w-0 flex-1 border-l border-border pl-4">
-          <Group items={lists} kind="list" />
+      {/* Detail: the selected area's defaults and member calendars/lists. */}
+      <div className="min-w-0 flex-1 space-y-4 border-l border-border pl-4">
+        <p className="text-xs text-muted-foreground">
+          A calendar or list can belong to several areas. Pick the{" "}
+          <span className="font-medium text-foreground">Default</span> one used when you
+          create an event or reminder while this area is active.
+        </p>
+
+        <div className="flex gap-4 border-t border-border pt-3">
+          <div className="min-w-0 flex-1">
+            <Group items={calendars} kind="calendar" />
+          </div>
+          <div className="min-w-0 flex-1 border-l border-border pl-4">
+            <Group items={lists} kind="list" />
+          </div>
         </div>
       </div>
     </div>

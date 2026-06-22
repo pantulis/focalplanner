@@ -7,6 +7,8 @@ import type {
   CalendarSets,
   EventDto,
   EventInput,
+  RecurrenceDto,
+  RecurrenceInput,
   ReminderDto,
   ReminderInput,
 } from "../api";
@@ -28,6 +30,25 @@ interface Dataset {
 }
 
 // ── Materialization (seed → concrete data anchored to `anchor`) ──────────────
+
+/** Normalize an inspector recurrence input to the stored DTO shape (or null). */
+function normRec(r?: RecurrenceInput | null): RecurrenceDto | null {
+  if (!r) return null;
+  return {
+    frequency: r.frequency,
+    interval: r.interval || 1,
+    daysOfWeek: r.daysOfWeek ?? [],
+    endDate: r.endDate ?? null,
+    count: r.count ?? null,
+  };
+}
+
+/** A simple weekly rule used to give seeded recurring items an editable rule. */
+function seedRec(recurring?: boolean): RecurrenceDto | null {
+  return recurring
+    ? { frequency: "weekly", interval: 1, daysOfWeek: [], endDate: null, count: null }
+    : null;
+}
 
 function atTime(anchor: Date, dayOffset: number, time?: string): Date {
   const base = startOfDay(addDays(anchor, dayOffset));
@@ -79,6 +100,14 @@ function materialize(seed: DemoSeed, anchor: Date): {
       location: e.location ?? null,
       url: e.url ?? null,
       recurring: !!e.recurring,
+      recurrence: seedRec(e.recurring),
+      needsResponse: !!e.needsResponse,
+      participants: (e.participants ?? []).map((p) => ({
+        name: p.name,
+        status: p.status,
+        isCurrentUser: !!p.isCurrentUser,
+        isOrganizer: !!p.isOrganizer,
+      })),
     };
   });
 
@@ -94,6 +123,7 @@ function materialize(seed: DemoSeed, anchor: Date): {
       title: r.title,
       completed: !!r.completed,
       recurring: !!r.recurring,
+      recurrence: seedRec(r.recurring),
       due,
       priority: r.priority ?? 0,
       listId: r.listId,
@@ -280,7 +310,10 @@ export const demoApi = {
       notes: input.notes ?? null,
       location: input.location ?? null,
       url: null,
-      recurring: false,
+      recurring: !!input.recurrence,
+      recurrence: normRec(input.recurrence),
+      needsResponse: false,
+      participants: [],
     });
     persistData();
   },
@@ -300,6 +333,8 @@ export const demoApi = {
       color: cal?.color ?? e.color,
       notes: input.notes ?? null,
       location: input.location ?? null,
+      recurring: !!input.recurrence,
+      recurrence: normRec(input.recurrence),
     });
     persistData();
   },
@@ -330,7 +365,8 @@ export const demoApi = {
       id: `dem-rem-${Date.now()}`,
       title: input.title,
       completed: false,
-      recurring: false,
+      recurring: !!input.recurrence,
+      recurrence: normRec(input.recurrence),
       due: input.due ?? null,
       priority: input.priority,
       listId: input.listId ?? null,
@@ -354,6 +390,8 @@ export const demoApi = {
       listTitle: list?.title ?? r.listTitle,
       color: list?.color ?? r.color,
       notes: input.notes ?? null,
+      recurring: !!input.recurrence,
+      recurrence: normRec(input.recurrence),
     });
     persistData();
   },

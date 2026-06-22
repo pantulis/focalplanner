@@ -62,9 +62,20 @@ export interface SeedEvent {
   endDayOffset?: number;
   /** Whether the event repeats (shows a recurring icon). */
   recurring?: boolean;
+  /** An invitation the current user hasn't responded to (shown greyed out). */
+  needsResponse?: boolean;
+  /** Attendees with their RSVP status (shown in the inspector). */
+  participants?: SeedParticipant[];
   location?: string;
   url?: string;
   notes?: string;
+}
+
+export interface SeedParticipant {
+  name: string;
+  status: "accepted" | "declined" | "tentative" | "pending";
+  isOrganizer?: boolean;
+  isCurrentUser?: boolean;
 }
 
 export interface SeedReminder {
@@ -133,11 +144,47 @@ export const DEMO_SEED: DemoSeed = {
     { calendarId: "cal-work", title: "Team standup", dayOffset: 1, start: "09:30", end: "09:45", recurring: true, location: "Zoom" },
     { calendarId: "cal-work", title: "Team standup", dayOffset: 2, start: "09:30", end: "09:45", recurring: true, location: "Zoom" },
     { calendarId: "cal-work", title: "1:1 with Manager", dayOffset: 0, start: "14:00", end: "14:30", location: "Conf Room B" },
+    {
+      calendarId: "cal-work",
+      title: "Budget planning sync",
+      dayOffset: 0,
+      start: "15:30",
+      end: "16:00",
+      needsResponse: true,
+      url: "https://meet.google.com/abc-defg-hij",
+      notes: "Join with Google Meet: https://meet.google.com/abc-defg-hij",
+      participants: [
+        { name: "Sandra Munuera", status: "accepted", isOrganizer: true },
+        { name: "You", status: "pending", isCurrentUser: true },
+        { name: "Pedro Sanz", status: "accepted" },
+        { name: "Lorena Velasco", status: "tentative" },
+        { name: "Victor Cacicedo", status: "declined" },
+        { name: "Ana Isabel Martin", status: "pending" },
+      ],
+    },
     { calendarId: "cal-work", title: "Interview: Senior Engineer", dayOffset: 0, start: "16:00", end: "16:45", notes: "Review resume beforehand" },
     { calendarId: "cal-work", title: "Product roadmap review", dayOffset: 1, start: "11:00", end: "12:00", location: "Conf Room A" },
     { calendarId: "cal-work", title: "Sprint planning", dayOffset: 2, start: "10:00", end: "11:30", location: "Zoom" },
     { calendarId: "cal-work", title: "Design critique", dayOffset: 3, start: "15:00", end: "16:00" },
-    { calendarId: "cal-work", title: "Quarterly business review", dayOffset: 4, start: "13:00", end: "15:00", notes: "Bring the Q3 deck" },
+    // A "clone": the same event copied into two calendars (shown zebra-striped in All Areas).
+    { calendarId: "cal-work", title: "Leadership review", dayOffset: 1, start: "11:00", end: "12:00", location: "Conf Room A" },
+    { calendarId: "cal-personal", title: "Leadership review", dayOffset: 1, start: "11:00", end: "12:00", location: "Conf Room A" },
+    {
+      calendarId: "cal-work",
+      title: "Quarterly business review",
+      dayOffset: 4,
+      start: "13:00",
+      end: "15:00",
+      needsResponse: true,
+      notes: "Bring the Q3 deck.\nMicrosoft Teams meeting: https://teams.microsoft.com/l/meetup-join/19%3ameeting_demo%40thread.v2/0",
+      participants: [
+        { name: "Fernando Oramas", status: "accepted", isOrganizer: true },
+        { name: "You", status: "pending", isCurrentUser: true },
+        { name: "Javier Oyarzun", status: "accepted" },
+        { name: "Isabel Freyre", status: "declined" },
+        { name: "Natalia Gasulla", status: "tentative" },
+      ],
+    },
     { calendarId: "cal-work", title: "Company offsite", dayOffset: 8, endDayOffset: 9, allDay: true, location: "Mountain Lodge" },
 
     // ── Personal ─────────────────────────────────────────────────────────

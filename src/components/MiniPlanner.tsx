@@ -18,6 +18,12 @@ interface Props {
   focusStart: Date;
   focusEnd: Date;
   contextHours: number;
+  /**
+   * Calendars / reminder lists to consider — the ones assigned to an Area of
+   * Focus and not hidden. When undefined, everything is considered.
+   */
+  calendarIds?: string[];
+  listIds?: string[];
   kind: "event" | "reminder";
   /** The saved item's id, so it isn't double-counted from the fetched data. */
   selfId?: string | null;
@@ -36,18 +42,24 @@ interface Item {
 }
 
 function tint(color: string | null | undefined): string {
-  return `${color ?? FALLBACK_COLOR}22`;
+  const c = color ?? FALLBACK_COLOR;
+  // EventKit colors are #RRGGBB or #RRGGBBAA; tint the RGB at ~13% alpha.
+  const m = /^#([0-9a-fA-F]{6})(?:[0-9a-fA-F]{2})?$/.exec(c);
+  return m ? `#${m[1]}22` : c;
 }
 
 /**
- * Read-only timeline around a task. Shows ALL events and reminders (every
- * calendar / list, ignoring the active Area of Focus) within ±contextHours, and
- * flags conflicts and busy windows. Used by the event/reminder inspectors.
+ * Read-only timeline around a task. Shows events and reminders from calendars /
+ * lists assigned to an Area of Focus (excluding hidden ones) within
+ * ±contextHours, and flags conflicts and busy windows. Used by the
+ * event/reminder inspectors.
  */
 export function MiniPlanner({
   focusStart,
   focusEnd,
   contextHours,
+  calendarIds,
+  listIds,
   kind,
   selfId,
   selfTitle,
@@ -73,9 +85,12 @@ export function MiniPlanner({
   const we = windowEnd.getTime();
 
   const items = useMemo<Item[]>(() => {
+    const allowedCals = calendarIds ? new Set(calendarIds) : null;
+    const allowedLists = listIds ? new Set(listIds) : null;
     const out: Item[] = [];
     for (const e of eventsQ.data ?? []) {
       if (e.allDay || (selfId && e.id === selfId)) continue;
+      if (allowedCals && (e.calendarId == null || !allowedCals.has(e.calendarId))) continue;
       const s = new Date(e.start);
       const en = new Date(e.end);
       if (s.getTime() < we && en.getTime() > ws) {
@@ -84,6 +99,7 @@ export function MiniPlanner({
     }
     for (const r of remindersQ.data ?? []) {
       if (!r.due || !r.due.includes("T") || (selfId && r.id === selfId)) continue;
+      if (allowedLists && (r.listId == null || !allowedLists.has(r.listId))) continue;
       const s = new Date(r.due);
       const en = addMinutes(s, REMINDER_SLOT_MINUTES);
       if (s.getTime() < we && en.getTime() > ws) {
@@ -91,7 +107,7 @@ export function MiniPlanner({
       }
     }
     return out;
-  }, [eventsQ.data, remindersQ.data, ws, we, selfId]);
+  }, [eventsQ.data, remindersQ.data, ws, we, selfId, calendarIds, listIds]);
 
   const selfEnd = kind === "reminder" ? addMinutes(focusStart, REMINDER_SLOT_MINUTES) : focusEnd;
 

@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { parseISO } from "date-fns";
-import { Circle, CircleCheck, Repeat, Trash2, X } from "lucide-react";
+import { Circle, CircleCheck, Trash2, X } from "lucide-react";
 import { Sheet } from "@/components/ui/sheet";
-import type { CalendarDto, ReminderDto, ReminderInput } from "@/lib/api";
+import type { CalendarDto, RecurrenceInput, ReminderDto, ReminderInput } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { RecurrencePicker } from "@/components/RecurrencePicker";
 import { Button } from "@/components/ui/button";
 import { DateTimePicker } from "@/components/ui/date-time-picker";
 import { Input } from "@/components/ui/input";
@@ -20,12 +21,17 @@ interface Props {
   initialDue?: string | null;
   /** Pre-selects the list when creating (e.g. "Create reminder in →"). */
   initialListId?: string | null;
+  /** Active area's default list; leads the picker and is the creation fallback. */
+  defaultListId?: string | null;
   lists: CalendarDto[];
   onSubmit: (input: ReminderInput) => void;
   onDelete: (id: string) => void;
   onToggleComplete: (reminder: ReminderDto, completed: boolean) => void;
   weekStartsOn?: 0 | 1;
   contextHours?: number;
+  /** Calendars/lists (area-assigned, not hidden) the schedule-context view considers. */
+  contextCalendarIds?: string[];
+  contextListIds?: string[];
   busy?: boolean;
 }
 
@@ -50,15 +56,23 @@ export function ReminderInspector({
   reminder,
   initialDue,
   initialListId,
+  defaultListId,
   lists,
   onSubmit,
   onDelete,
   onToggleComplete,
   weekStartsOn = 1,
   contextHours = 2,
+  contextCalendarIds,
+  contextListIds,
   busy,
 }: Props) {
   const editable = lists.filter((c) => c.editable);
+  // For a NEW reminder, surface the area default first (tagged), then the rest.
+  const defaultList = !reminder ? editable.find((c) => c.id === defaultListId) : undefined;
+  const orderedLists = defaultList
+    ? [defaultList, ...editable.filter((c) => c.id !== defaultList.id)]
+    : editable;
   const [title, setTitle] = useState("");
   const [dueDate, setDueDate] = useState("");
   // type="time" doesn't capture in WKWebView, so use hour/minute selects.
@@ -68,6 +82,7 @@ export function ReminderInspector({
   const [listId, setListId] = useState("");
   const [notes, setNotes] = useState("");
   const [completed, setCompleted] = useState(false);
+  const [recurrence, setRecurrence] = useState<RecurrenceInput | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -82,12 +97,14 @@ export function ReminderInspector({
       setListId(reminder.listId ?? editable[0]?.id ?? "");
       setNotes(reminder.notes ?? "");
       setCompleted(reminder.completed);
+      setRecurrence(reminder.recurrence);
     } else {
       setTitle("");
       setPriority(0);
-      setListId(initialListId ?? editable[0]?.id ?? "");
+      setListId(initialListId ?? defaultListId ?? editable[0]?.id ?? "");
       setNotes("");
       setCompleted(false);
+      setRecurrence(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, reminder]);
@@ -110,11 +127,13 @@ export function ReminderInspector({
       priority,
       listId: listId || null,
       notes: notes || null,
+      // A reminder can only repeat relative to a due date.
+      recurrence: due ? recurrence : null,
     });
   }
 
   return (
-    <Sheet open={open} onOpenChange={(o) => !o && onClose()} className="w-[360px]">
+    <Sheet open={open} onOpenChange={(o) => !o && onClose()} className="w-[clamp(384px,38vw,680px)]">
       <header className="flex items-center justify-between border-b border-border px-4 py-3">
         <h2 className="text-sm font-semibold">
           {reminder ? "Reminder" : "New reminder"}
@@ -166,13 +185,6 @@ export function ReminderInspector({
           />
         </div>
 
-        {reminder?.recurring && (
-          <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-            <Repeat className="size-4 shrink-0" />
-            Repeats
-          </div>
-        )}
-
         <div className="space-y-1.5">
           <Label htmlFor="rm-due">Due</Label>
           <DateTimePicker
@@ -185,6 +197,16 @@ export function ReminderInspector({
             weekStartsOn={weekStartsOn}
           />
         </div>
+
+        {dueDate ? (
+          <RecurrencePicker
+            value={recurrence}
+            onChange={setRecurrence}
+            weekStartsOn={weekStartsOn}
+          />
+        ) : (
+          <p className="text-xs text-muted-foreground">Set a due date to repeat this reminder.</p>
+        )}
 
         <div className="space-y-1.5">
           <Label htmlFor="rm-priority">Priority</Label>
@@ -208,9 +230,10 @@ export function ReminderInspector({
             value={listId}
             onChange={(e) => setListId(e.target.value)}
           >
-            {editable.map((c) => (
+            {orderedLists.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.title}
+                {c.id === defaultList?.id ? " — Default" : ""}
               </option>
             ))}
           </Select>
@@ -234,6 +257,8 @@ export function ReminderInspector({
             focusStart={parseISO(`${dueDate}T${dueHour}:${dueMinute || "00"}`)}
             focusEnd={parseISO(`${dueDate}T${dueHour}:${dueMinute || "00"}`)}
             contextHours={contextHours}
+            calendarIds={contextCalendarIds}
+            listIds={contextListIds}
             kind="reminder"
             selfId={reminder?.id}
             selfTitle={title}

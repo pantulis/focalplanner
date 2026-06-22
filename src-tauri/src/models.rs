@@ -5,6 +5,50 @@
 
 use serde::{Deserialize, Serialize};
 
+/// An event attendee/organizer for the inspector's participant list.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ParticipantDto {
+    pub name: Option<String>,
+    /// Lowercase status: accepted | declined | tentative | pending | unknown |
+    /// delegated | completed | inProcess.
+    pub status: String,
+    pub is_current_user: bool,
+    pub is_organizer: bool,
+}
+
+/// A recurrence rule in the small shape the frontend edits.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecurrenceDto {
+    /// "daily" | "weekly" | "monthly" | "yearly".
+    pub frequency: String,
+    pub interval: i64,
+    /// Weekdays for weekly rules (0 = Sunday … 6 = Saturday).
+    pub days_of_week: Vec<i64>,
+    /// End date as `YYYY-MM-DD`, if the rule ends on a date.
+    pub end_date: Option<String>,
+    /// Occurrence count, if the rule ends after a number of times.
+    pub count: Option<u64>,
+}
+
+/// Recurrence as submitted from the inspector. `None` clears recurrence.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecurrenceInput {
+    pub frequency: String,
+    #[serde(default = "default_interval")]
+    pub interval: i64,
+    #[serde(default)]
+    pub days_of_week: Vec<i64>,
+    pub end_date: Option<String>,
+    pub count: Option<u64>,
+}
+
+fn default_interval() -> i64 {
+    1
+}
+
 /// A calendar or reminder list shown in the sidebar.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -55,6 +99,13 @@ pub struct EventDto {
     pub url: Option<String>,
     /// Whether the event has a recurrence rule.
     pub recurring: bool,
+    /// The event's recurrence rule, when it has one.
+    pub recurrence: Option<RecurrenceDto>,
+    /// True when the current user is an attendee who hasn't responded yet
+    /// (an invitation awaiting RSVP).
+    pub needs_response: bool,
+    /// Attendees (organizer first when known) with their RSVP status.
+    pub participants: Vec<ParticipantDto>,
 }
 
 /// A reminder (to-do).
@@ -66,6 +117,8 @@ pub struct ReminderDto {
     pub completed: bool,
     /// Whether the reminder has a recurrence rule.
     pub recurring: bool,
+    /// The reminder's recurrence rule, when it has one.
+    pub recurrence: Option<RecurrenceDto>,
     /// Local datetime in `YYYY-MM-DDTHH:MM` form (matches `<input type=datetime-local>`),
     /// or `YYYY-MM-DD` when no time component is set. `None` when undated.
     pub due: Option<String>,
@@ -94,6 +147,9 @@ pub struct EventInput {
     pub calendar_id: Option<String>,
     pub notes: Option<String>,
     pub location: Option<String>,
+    /// Recurrence to apply; `None`/absent clears any existing rule.
+    #[serde(default)]
+    pub recurrence: Option<RecurrenceInput>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -108,4 +164,7 @@ pub struct ReminderInput {
     /// Target reminder list; falls back to the default list when omitted.
     pub list_id: Option<String>,
     pub notes: Option<String>,
+    /// Recurrence to apply; `None`/absent clears any existing rule.
+    #[serde(default)]
+    pub recurrence: Option<RecurrenceInput>,
 }

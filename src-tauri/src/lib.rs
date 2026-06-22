@@ -46,6 +46,40 @@ fn start_change_observer(app: tauri::AppHandle) {
     let _ = app;
 }
 
+/// Open Apple Calendar so the user can respond to an invitation. `date`
+/// (`YYYY-MM-DD`) optionally navigates Calendar to that day. EventKit has no
+/// public RSVP API, so the actual accept/decline happens in Calendar.
+#[tauri::command]
+fn open_calendar(date: Option<String>) {
+    // Always open Calendar; this needs no special permission.
+    let _ = std::process::Command::new("open")
+        .args(["-a", "Calendar"])
+        .spawn();
+
+    // Best-effort: navigate to the event's day (requires Automation permission).
+    if let Some(date) = date {
+        let mut parts = date.split('-');
+        let (y, m, d) = (parts.next(), parts.next(), parts.next());
+        if let (Some(y), Some(m), Some(d)) = (y, m, d) {
+            if y.parse::<i32>().is_ok() && m.parse::<u32>().is_ok() && d.parse::<u32>().is_ok() {
+                let script = format!(
+                    "tell application \"Calendar\"\n\
+                     activate\n\
+                     set d to current date\n\
+                     set year of d to {y}\n\
+                     set month of d to {m}\n\
+                     set day of d to {d}\n\
+                     view calendar at d\n\
+                     end tell"
+                );
+                let _ = std::process::Command::new("osascript")
+                    .args(["-e", &script])
+                    .spawn();
+            }
+        }
+    }
+}
+
 // ── GitHub preference sync ──────────────────────────────────────────────────
 
 async fn blocking<T, F>(f: F) -> Result<T, String>
@@ -165,16 +199,44 @@ pub fn run() {
                     &PredefinedMenuItem::select_all(handle, None)?,
                 ],
             )?;
-            Menu::with_items(handle, &[&app_menu, &edit_menu])
+            let view_menu = Submenu::with_items(
+                handle,
+                "View",
+                true,
+                &[
+                    &MenuItem::with_id(handle, "view-daily", "Daily", true, Some("CmdOrCtrl+1"))?,
+                    &MenuItem::with_id(handle, "view-weekly", "Weekly", true, Some("CmdOrCtrl+2"))?,
+                    &MenuItem::with_id(handle, "view-planner", "Planner", true, Some("CmdOrCtrl+3"))?,
+                    &PredefinedMenuItem::separator(handle)?,
+                    &MenuItem::with_id(handle, "area-next", "Next Area of Focus", true, Some("CmdOrCtrl+]"))?,
+                    &MenuItem::with_id(handle, "area-prev", "Previous Area of Focus", true, Some("CmdOrCtrl+["))?,
+                ],
+            )?;
+            let reminders_menu = Submenu::with_items(
+                handle,
+                "Reminders",
+                true,
+                &[
+                    &MenuItem::with_id(handle, "filter-today", "Today & Overdue", true, Some("CmdOrCtrl+Alt+1"))?,
+                    &MenuItem::with_id(handle, "filter-scheduled", "Scheduled", true, Some("CmdOrCtrl+Alt+2"))?,
+                    &MenuItem::with_id(handle, "filter-unscheduled", "Unscheduled", true, Some("CmdOrCtrl+Alt+3"))?,
+                    &MenuItem::with_id(handle, "filter-week", "Next 7 Days", true, Some("CmdOrCtrl+Alt+4"))?,
+                ],
+            )?;
+            Menu::with_items(handle, &[&app_menu, &edit_menu, &view_menu, &reminders_menu])
         })
         .on_menu_event(|app, event| {
-            if event.id().as_ref() == "about" {
+            let id = event.id().as_ref();
+            if id == "about" {
                 let _ = app.emit("menu-about", ());
+            } else if id.starts_with("view-") || id.starts_with("area-") || id.starts_with("filter-") {
+                let _ = app.emit("menu-action", id.to_string());
             }
         })
         .invoke_handler(tauri::generate_handler![
             about_info,
             start_change_observer,
+            open_calendar,
             github_device_start,
             github_device_poll,
             github_device_cancel,

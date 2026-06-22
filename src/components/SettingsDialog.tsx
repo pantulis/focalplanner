@@ -1,7 +1,17 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Check, Cloud, Loader2, Lock, Sparkles } from "lucide-react";
-import type { CalendarDto } from "@/lib/api";
+import {
+  Check,
+  CircleCheck,
+  CircleHelp,
+  CircleX,
+  Cloud,
+  Loader2,
+  Lock,
+  RefreshCw,
+  Sparkles,
+} from "lucide-react";
+import { api, type AccessStatus, type AuthStatus, type CalendarDto } from "@/lib/api";
 import type { AreaConfig } from "@/lib/areas";
 import type { SyncController } from "@/lib/sync";
 import { AreasPane } from "@/components/AreasPane";
@@ -129,7 +139,7 @@ export function SettingsDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()} className="max-w-3xl">
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()} className="max-w-5xl">
       <DialogHeader>
         <DialogTitle>Settings</DialogTitle>
       </DialogHeader>
@@ -150,7 +160,7 @@ export function SettingsDialog({
           ))}
         </div>
 
-        <div className="h-[30rem] min-w-0 flex-1 overflow-y-auto pr-1">
+        <div className="h-[70vh] min-h-[30rem] min-w-0 flex-1 overflow-y-auto pr-1">
           {pane === "general" && (
             <div className="space-y-5">
               <label className="flex items-center gap-2 text-sm">
@@ -270,6 +280,25 @@ export function SettingsDialog({
               lists={areaLists}
               config={areaConfig}
               onChange={onAreaConfigChange}
+              defaultCalendarByArea={settings.areaDefaultCalendarId ?? {}}
+              defaultListByArea={settings.areaDefaultListId ?? {}}
+              onSetDefault={(areaId, kind, id) =>
+                onChange(
+                  kind === "calendar"
+                    ? {
+                        areaDefaultCalendarId: {
+                          ...(settings.areaDefaultCalendarId ?? {}),
+                          [areaId]: id,
+                        },
+                      }
+                    : {
+                        areaDefaultListId: {
+                          ...(settings.areaDefaultListId ?? {}),
+                          [areaId]: id,
+                        },
+                      },
+                )
+              }
             />
           )}
 
@@ -539,6 +568,8 @@ export function SettingsDialog({
                   </Button>
                 </div>
               )}
+
+              <CalendarAccessSection />
             </div>
           )}
         </div>
@@ -586,5 +617,114 @@ function IgnoreSection({
         </label>
       ))}
     </section>
+  );
+}
+
+/** Friendly label + icon for an EventKit authorization status. */
+function statusMeta(status: AuthStatus | undefined): {
+  label: string;
+  className: string;
+  Icon: typeof Check;
+} {
+  switch (status) {
+    case "fullAccess":
+      return { label: "Granted", className: "text-emerald-600 dark:text-emerald-400", Icon: CircleCheck };
+    case "writeOnly":
+      return { label: "Write-only", className: "text-amber-600 dark:text-amber-400", Icon: CircleHelp };
+    case "denied":
+      return { label: "Denied", className: "text-destructive", Icon: CircleX };
+    case "restricted":
+      return { label: "Restricted", className: "text-destructive", Icon: Lock };
+    case "notDetermined":
+      return { label: "Not requested", className: "text-muted-foreground", Icon: CircleHelp };
+    default:
+      return { label: "Checking…", className: "text-muted-foreground", Icon: CircleHelp };
+  }
+}
+
+function AccessRow({ label, status }: { label: string; status: AuthStatus | undefined }) {
+  const m = statusMeta(status);
+  return (
+    <div className="flex items-center justify-between text-sm">
+      <span>{label}</span>
+      <span className="flex items-center gap-1.5">
+        <span className={cn("flex items-center gap-1.5 text-xs font-medium", m.className)}>
+          <m.Icon className="size-3.5" /> {m.label}
+        </span>
+        <code className="rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">
+          {status ?? "—"}
+        </code>
+      </span>
+    </div>
+  );
+}
+
+/**
+ * Shows the macOS Calendar & Reminders authorization grants separately, with a
+ * recheck button, an in-app access request (for not-yet-requested entities), and
+ * a shortcut to System Settings (when one was denied/restricted).
+ */
+function CalendarAccessSection() {
+  const [access, setAccess] = useState<AccessStatus | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const recheck = () => api.getAccessStatus().then(setAccess).catch(() => setAccess(null));
+  useEffect(() => {
+    recheck();
+  }, []);
+
+  const statuses = [access?.events, access?.reminders];
+  const canRequest = statuses.some((s) => s === "notDetermined");
+  const needsSettings = statuses.some((s) => s === "denied" || s === "restricted");
+
+  async function request() {
+    setBusy(true);
+    try {
+      setAccess(await api.requestAccess());
+    } catch {
+      /* ignore */
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="space-y-3 border-t border-border pt-4">
+      <div className="space-y-1">
+        <Label>Calendar &amp; Reminders access</Label>
+        <p className="text-xs text-muted-foreground">
+          FocalPlanner reads and writes your macOS Calendars and Reminders. These grants
+          are managed by macOS; check or request them here.
+        </p>
+      </div>
+
+      <div className="space-y-1.5">
+        <AccessRow label="Calendars" status={access?.events} />
+        <AccessRow label="Reminders" status={access?.reminders} />
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" variant="outline" onClick={recheck} disabled={busy}>
+          <RefreshCw className="size-4" /> Recheck
+        </Button>
+        {canRequest && (
+          <Button size="sm" onClick={request} disabled={busy}>
+            {busy && <Loader2 className="size-4 animate-spin" />} Request access
+          </Button>
+        )}
+        {needsSettings && (
+          <Button size="sm" variant="ghost" onClick={() => api.openPrivacySettings()}>
+            Open Privacy Settings
+          </Button>
+        )}
+      </div>
+
+      {needsSettings && (
+        <p className="text-xs text-muted-foreground">
+          macOS won't re-prompt once access was denied — toggle FocalPlanner on under
+          Privacy &amp; Security, then Recheck.
+        </p>
+      )}
+    </div>
   );
 }
