@@ -35,6 +35,8 @@ interface Props {
   onEmptyContextMenu: (e: React.MouseEvent) => void;
   /** Begin a pointer-based drag of a reminder onto the planner to schedule it. */
   onReminderDragStart: (e: React.PointerEvent, reminder: ReminderDto) => void;
+  /** Label of the active area of focus; null when "All Areas" is selected. */
+  areaLabel: string | null;
 }
 
 function dueStartOfDay(due: string): number | null {
@@ -69,6 +71,7 @@ export function ReminderList({
   onContextMenu,
   onEmptyContextMenu,
   onReminderDragStart,
+  areaLabel,
 }: Props) {
   const groupFilter = listFilter;
 
@@ -96,10 +99,14 @@ export function ReminderList({
       });
   }, [reminders, groupFilter, statusFilter]);
 
+  const todayMs = startOfDay(new Date()).getTime();
+
   return (
     <section className="flex h-full w-[22rem] shrink-0 flex-col border-l border-border">
       <header className="flex items-center justify-between px-4 pt-3">
-        <h2 className="text-base font-semibold">Reminders</h2>
+        <h2 className="truncate text-base font-semibold">
+          {areaLabel ? `Reminders for ${areaLabel}` : "Showing all reminders"}
+        </h2>
       </header>
 
       {/* Filters */}
@@ -149,6 +156,8 @@ export function ReminderList({
           <AnimatePresence initial={false}>
           {visible.map((r) => {
             const due = formatReminderDue(r.due);
+            const overdue =
+              !r.completed && !!r.due && startOfDay(parseISO(r.due)).getTime() < todayMs;
             return (
               <motion.div
                 key={r.id ?? r.title}
@@ -185,6 +194,11 @@ export function ReminderList({
                   </div>
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     {due && <span>{due}</span>}
+                    {overdue && (
+                      <span className="rounded-full bg-destructive/15 px-1.5 text-[10px] font-medium leading-tight text-destructive">
+                        Overdue
+                      </span>
+                    )}
                     {r.recurring && (
                       <Repeat className="size-3 shrink-0" aria-label="Repeats" />
                     )}

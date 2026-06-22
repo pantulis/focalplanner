@@ -1181,6 +1181,11 @@ function Planner() {
               onContextMenu={openReminderMenu}
               onEmptyContextMenu={openEmptyReminderMenu}
               onReminderDragStart={startReminderDrag}
+              areaLabel={
+                activeArea === "all"
+                  ? null
+                  : availableAreas.find((a) => a.id === activeArea)?.label ?? null
+              }
             />
           )}
         </div>
