@@ -78,6 +78,7 @@ function materialize(seed: DemoSeed, anchor: Date): {
       notes: e.notes ?? null,
       location: e.location ?? null,
       url: e.url ?? null,
+      recurring: !!e.recurring,
     };
   });
 
@@ -279,6 +280,7 @@ export const demoApi = {
       notes: input.notes ?? null,
       location: input.location ?? null,
       url: null,
+      recurring: false,
     });
     persistData();
   },

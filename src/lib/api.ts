@@ -41,6 +41,7 @@ export interface EventDto {
   notes: string | null;
   location: string | null;
   url: string | null;
+  recurring: boolean;
 }
 
 export interface ReminderDto {

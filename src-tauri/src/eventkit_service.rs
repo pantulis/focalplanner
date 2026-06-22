@@ -161,6 +161,7 @@ fn event_to_dto(e: EKEvent) -> EventDto {
         notes: e.notes,
         location: e.location,
         url: e.url,
+        recurring: e.has_recurrence_rules || !e.recurrence_rules.is_empty(),
     }
 }
 

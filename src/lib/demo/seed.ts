@@ -60,6 +60,8 @@ export interface SeedEvent {
   allDay?: boolean;
   /** For multi-day all-day events: last day (inclusive), relative to today. */
   endDayOffset?: number;
+  /** Whether the event repeats (shows a recurring icon). */
+  recurring?: boolean;
   location?: string;
   url?: string;
   notes?: string;
@@ -127,9 +129,9 @@ export const DEMO_SEED: DemoSeed = {
 
   events: [
     // ── Work ──────────────────────────────────────────────────────────────
-    { calendarId: "cal-work", title: "Team standup", dayOffset: 0, start: "09:30", end: "09:45", location: "Zoom", notes: "Daily sync" },
-    { calendarId: "cal-work", title: "Team standup", dayOffset: 1, start: "09:30", end: "09:45", location: "Zoom" },
-    { calendarId: "cal-work", title: "Team standup", dayOffset: 2, start: "09:30", end: "09:45", location: "Zoom" },
+    { calendarId: "cal-work", title: "Team standup", dayOffset: 0, start: "09:30", end: "09:45", recurring: true, location: "Zoom", notes: "Daily sync" },
+    { calendarId: "cal-work", title: "Team standup", dayOffset: 1, start: "09:30", end: "09:45", recurring: true, location: "Zoom" },
+    { calendarId: "cal-work", title: "Team standup", dayOffset: 2, start: "09:30", end: "09:45", recurring: true, location: "Zoom" },
     { calendarId: "cal-work", title: "1:1 with Manager", dayOffset: 0, start: "14:00", end: "14:30", location: "Conf Room B" },
     { calendarId: "cal-work", title: "Interview: Senior Engineer", dayOffset: 0, start: "16:00", end: "16:45", notes: "Review resume beforehand" },
     { calendarId: "cal-work", title: "Product roadmap review", dayOffset: 1, start: "11:00", end: "12:00", location: "Conf Room A" },
@@ -145,9 +147,9 @@ export const DEMO_SEED: DemoSeed = {
     { calendarId: "cal-personal", title: "Apartment inspection", dayOffset: 7, start: "10:00", end: "10:30" },
 
     // ── Fitness ──────────────────────────────────────────────────────────
-    { calendarId: "cal-fitness", title: "Morning run", dayOffset: 0, start: "07:00", end: "07:30", location: "Riverside Trail" },
-    { calendarId: "cal-fitness", title: "Morning run", dayOffset: 2, start: "07:00", end: "07:30", location: "Riverside Trail" },
-    { calendarId: "cal-fitness", title: "Yoga class", dayOffset: 1, start: "18:30", end: "19:30", location: "Flow Studio" },
+    { calendarId: "cal-fitness", title: "Morning run", dayOffset: 0, start: "07:00", end: "07:30", recurring: true, location: "Riverside Trail" },
+    { calendarId: "cal-fitness", title: "Morning run", dayOffset: 2, start: "07:00", end: "07:30", recurring: true, location: "Riverside Trail" },
+    { calendarId: "cal-fitness", title: "Yoga class", dayOffset: 1, start: "18:30", end: "19:30", recurring: true, location: "Flow Studio" },
     { calendarId: "cal-fitness", title: "Personal training", dayOffset: 4, start: "07:00", end: "08:00", location: "Gold's Gym" },
     { calendarId: "cal-fitness", title: "Annual physical", dayOffset: 10, start: "09:00", end: "09:45", location: "City Medical" },
 
@@ -163,7 +165,7 @@ export const DEMO_SEED: DemoSeed = {
     { calendarId: "cal-family", title: "Weekend trip", dayOffset: 13, endDayOffset: 14, allDay: true, location: "Lake Tahoe" },
 
     // ── Learning ─────────────────────────────────────────────────────────
-    { calendarId: "cal-learning", title: "Spanish lesson", dayOffset: 1, start: "20:00", end: "20:45", url: "https://meet.example.com/spanish" },
+    { calendarId: "cal-learning", title: "Spanish lesson", dayOffset: 1, start: "20:00", end: "20:45", recurring: true, url: "https://meet.example.com/spanish" },
     { calendarId: "cal-learning", title: "Online course: System Design", dayOffset: 2, start: "21:00", end: "22:00" },
     { calendarId: "cal-learning", title: "Book club", dayOffset: 7, start: "19:00", end: "20:30", location: "Central Library" },
 

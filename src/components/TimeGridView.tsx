@@ -347,10 +347,11 @@ export function TimeGridView({
                   onMouseEnter={(ev) => showHover(ev, { kind: "event", event: e })}
                   onMouseMove={(ev) => showHover(ev, { kind: "event", event: e })}
                   onMouseLeave={hideHover}
-                  className="block w-full truncate rounded border-l-2 px-1 text-left text-[11px]"
+                  className="flex w-full items-center gap-1 rounded border-l-2 px-1 text-left text-[11px]"
                   style={{ backgroundColor: tint(e.color), borderLeftColor: e.color ?? FALLBACK_COLOR }}
                 >
-                  {e.title}
+                  <span className="truncate">{e.title}</span>
+                  {e.recurring && <Repeat className="size-2.5 shrink-0 opacity-70" />}
                 </motion.button>
               ))}
               </AnimatePresence>
@@ -607,6 +608,7 @@ function HoverCard({ x, y, info }: { x: number; y: number; info: HoverInfo }) {
       ? "All day"
       : `${format(parseISO(e.start), "EEE, MMM d · HH:mm")} – ${format(parseISO(e.end), "HH:mm")}`;
     location = e.location;
+    recurring = e.recurring;
   } else {
     const r = info.reminder;
     title = r.title || "(untitled reminder)";
@@ -728,7 +730,10 @@ function EventBlock({
           className="absolute inset-x-0 top-0 h-1.5 cursor-ns-resize"
         />
       )}
-      <div className="pointer-events-none truncate font-medium">{title}</div>
+      <div className="pointer-events-none flex items-center gap-1 font-medium">
+        <span className="truncate">{title}</span>
+        {block.event?.recurring && <Repeat className="size-3 shrink-0 opacity-70" />}
+      </div>
       {height > 28 && (
         <div className="pointer-events-none truncate opacity-70">
           {minutesLabel(startMin)} – {minutesLabel(endMin)}

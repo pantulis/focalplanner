@@ -53,6 +53,8 @@ pub struct EventDto {
     pub notes: Option<String>,
     pub location: Option<String>,
     pub url: Option<String>,
+    /// Whether the event has a recurrence rule.
+    pub recurring: bool,
 }
 
 /// A reminder (to-do).

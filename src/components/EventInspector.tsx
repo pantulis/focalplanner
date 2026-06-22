@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { parseISO } from "date-fns";
-import { Trash2, X } from "lucide-react";
+import { Repeat, Trash2, X } from "lucide-react";
 import { Sheet } from "@/components/ui/sheet";
 import type { CalendarDto, EventDto, EventInput } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -153,6 +153,13 @@ export function EventInspector({
             onKeyDown={(e) => e.key === "Enter" && submit()}
           />
         </div>
+
+        {event?.recurring && (
+          <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+            <Repeat className="size-4 shrink-0" />
+            Repeats
+          </div>
+        )}
 
         <div className="space-y-1.5">
           <Label>Starts</Label>
