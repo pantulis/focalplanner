@@ -6,6 +6,42 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 project adheres to [Semantic Versioning](https://semver.org/). Update this file in
 the same commit that bumps the version for each release.
 
+## [1.1.0] — 2026-06-22
+
+### Added
+- **Event clones across calendars.** A **Clone to Calendar** action copies an
+  event into another calendar; copies sharing a title + time render as a single
+  **zebra-striped** block with a CLONE pill. Moving or dragging one copy moves them
+  all; deleting prompts to remove just the clicked copy or every copy; editing warns
+  that changes apply only to the clicked copy. The confirmation dialogs detect copies
+  in every unhidden calendar, across all focus areas.
+- **Per-area default calendar & reminder list.** Pick a default for each Area of
+  Focus from a radio on its member rows (**Settings → Areas of Focus**). When that
+  area is active, the default leads the create menu (with a **DEFAULT** pill) and is
+  pre-selected in the inspector. Skipped in "All Areas", and (for lists) when a
+  reminder list is filtered.
+- **Vertical zoom for the Daily/Weekly grid.** Make hours taller or shorter with a
+  toolbar `− / ＋` stepper or **⌥ + scroll** over the grid (session-only; resets on
+  relaunch).
+- **Recurrence editing.** Set/edit repeat rules on events and reminders; recurring
+  events show a repeat indicator.
+- **Event participants & meetings.** The event inspector lists attendees with a
+  **Join** button for video links, and shows an RSVP banner that opens the event in
+  Calendar (EventKit cannot RSVP programmatically).
+- **Native menus & shortcuts.** New **View** and **Reminders** menus with keyboard
+  accelerators to switch views, change the active area, and set the reminder filter.
+- **Calendar & Reminders access pane** under **Settings → Sync**, showing the live
+  authorization status with re-check / request / open-Privacy-Settings actions.
+
+### Changed
+- **Areas of Focus** settings pane uses a master–detail layout (area list + detail).
+- Inspector sheets widen on wide windows.
+- All-day event/task sections are resizable, and the timed grid is clipped to work
+  hours (auto-expanding to include out-of-range items). Per-area 5-day work week.
+
+### Fixed
+- Event **location** not persisting (now applied via the event's structured location).
+
 ## [1.0.0] — 2026-06-21
 
 First stable release.
