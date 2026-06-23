@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 project adheres to [Semantic Versioning](https://semver.org/). Update this file in
 the same commit that bumps the version for each release.
 
+## [1.2.0] — 2026-06-23
+
+### Added
+- **Combine multiple Areas of Focus.** Shift- or ⌘-click areas in the sidebar to
+  view several at once; the Daily/Weekly/Planner views show the union of their
+  calendars and reminders. A footer banner names the combined areas. The selection
+  is session-only and resets to a single area on relaunch.
+- **Reusable Banner component** with color variants and optional dismissal, used for
+  the combined-areas notice and the update notice, now shown in a footer along the
+  bottom of the window.
+- **Hide individual calendar events.** Right-click an event → **Hide event**; a
+  **View → Show Hidden Events** toggle (⌘⇧H, with a checkmark) reveals them faded so
+  they can be unhidden. Hidden events are stored locally, never written to the
+  calendar or synced preferences, and persist across sessions.
+
+### Changed
+- **Weekly view polish.** Past days get slightly narrower columns; today's column is
+  highlighted with a faint wash, a colored top accent, and the existing date pill.
+  Event blocks now render over an opaque base so column tints never shift their color.
+
 ## [1.1.2] — 2026-06-23
 
 ### Fixed

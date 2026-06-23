@@ -154,6 +154,9 @@ export interface TrayItemDto {
 export const api = {
   startChangeObserver: () => invoke<void>("start_change_observer"),
   aboutInfo: () => invoke<AboutInfo>("about_info"),
+  /** Reflect the "show hidden events" toggle as a checkmark in the native View menu. */
+  setHiddenEventsChecked: (checked: boolean) =>
+    invoke<void>("set_hidden_events_checked", { checked }).catch(() => {}),
   openPrivacySettings: () => invoke<void>("open_privacy_settings"),
   openCalendar: (date?: string | null) =>
     invoke<void>("open_calendar", { date: date ?? null }),

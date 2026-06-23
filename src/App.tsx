@@ -13,6 +13,9 @@ import {
   CircleCheck,
   Clock,
   Copy,
+  Eye,
+  EyeOff,
+  Layers,
   ListTodo,
   Moon,
   Pencil,
@@ -50,7 +53,8 @@ import {
   ZOOM_STEP,
   type PlannerView,
 } from "@/lib/planner";
-import { AREAS, areaMembers, useAreaConfig } from "@/lib/areas";
+import { AREAS, areaMembers, selectedMemberSet, useAreaConfig } from "@/lib/areas";
+import { useHiddenEvents } from "@/lib/hiddenEvents";
 import {
   TIMES_OF_DAY,
   rescheduleDate,
@@ -65,6 +69,7 @@ import { ContextMenu, type MenuNode } from "@/components/ui/context-menu";
 import { PermissionGate } from "@/components/PermissionGate";
 import { AppSidebar, type Section } from "@/components/AppSidebar";
 import { UpdateBanner } from "@/components/UpdateBanner";
+import { Banner } from "@/components/ui/Banner";
 import { useUpdateCheck } from "@/lib/useUpdateCheck";
 import { PlannerToolbar } from "@/components/PlannerToolbar";
 import { TimeGridView } from "@/components/TimeGridView";
@@ -171,9 +176,33 @@ function Planner() {
 
   const [section, setSection] = useState<Section>("today");
   const [anchor, setAnchor] = useState<Date>(() => new Date());
-  const [activeArea, setActiveArea] = useState<string>("all");
+  // Active Areas of Focus. Usually a single area; shift/⌘-click combines several
+  // (session-only, resets on relaunch). "all" is the All-Areas pseudo-area and is
+  // never combined with specific ids.
+  const [activeAreas, setActiveAreas] = useState<string[]>(["all"]);
+  // Collapsed id for the single-value per-area settings (work week, default
+  // calendar/list, reminder filter): a real area only when EXACTLY one specific
+  // area is active; otherwise "all", so a multi-selection behaves neutrally.
+  const activeArea =
+    activeAreas.length === 1 && activeAreas[0] !== "all" ? activeAreas[0] : "all";
+  // Toggle an area in/out of the selection. Plain click (or "all") replaces the
+  // whole selection; additive (shift/⌘) click toggles a specific area and drops "all".
+  const selectArea = (id: string, additive?: boolean) =>
+    setActiveAreas((prev) => {
+      if (id === "all" || !additive) return [id];
+      const rest = prev.filter((a) => a !== "all");
+      const next = rest.includes(id) ? rest.filter((a) => a !== id) : [...rest, id];
+      return next.length ? next : ["all"];
+    });
   // Ephemeral vertical zoom of the time grid (1 = 100%); resets on relaunch.
   const [gridZoom, setGridZoom] = useState(1);
+  // Locally-hidden calendar events (view-only, persisted in localStorage).
+  const { hiddenIds, isHidden, hide, unhide, showHidden, toggleShowHidden } =
+    useHiddenEvents();
+  // Mirror the toggle into the native View-menu checkmark (on mount + on change).
+  useEffect(() => {
+    api.setHiddenEventsChecked(showHidden);
+  }, [showHidden]);
   // Reminder list/status filters remembered per area of focus.
   const [areaFilters, setAreaFilters] = useState<
     Record<string, { list: string; status: StatusFilter }>
@@ -467,16 +496,22 @@ function Planner() {
   const filteredEvents = useMemo(() => {
     if (!effectiveEvents) return effectiveEvents;
     const ignored = new Set(settings.ignoredCalendarIds);
-    const areaSet =
-      activeArea === "all"
-        ? null
-        : new Set(areaMembers(areaConfig, activeArea).calendarIds);
+    const areaSet = selectedMemberSet(areaConfig, activeAreas, "calendar");
     return effectiveEvents.filter((e) => {
       if (e.calendarId != null && ignored.has(e.calendarId)) return false;
-      if (areaSet) return e.calendarId != null && areaSet.has(e.calendarId);
+      if (areaSet && !(e.calendarId != null && areaSet.has(e.calendarId))) return false;
+      // Locally-hidden events: dropped unless the user is revealing hidden events.
+      if (e.id != null && hiddenIds.has(e.id) && !showHidden) return false;
       return true;
     });
-  }, [effectiveEvents, activeArea, areaConfig, settings.ignoredCalendarIds]);
+  }, [
+    effectiveEvents,
+    activeAreas,
+    areaConfig,
+    settings.ignoredCalendarIds,
+    hiddenIds,
+    showHidden,
+  ]);
 
   // The same event copied across calendars (matched by name+time). Computed over
   // every unhidden copy regardless of Area of Focus (only hidden calendars are
@@ -493,16 +528,13 @@ function Planner() {
   const filteredReminders = useMemo(() => {
     if (!effectiveReminders) return effectiveReminders;
     const ignored = new Set(settings.ignoredListIds);
-    const areaSet =
-      activeArea === "all"
-        ? null
-        : new Set(areaMembers(areaConfig, activeArea).listIds);
+    const areaSet = selectedMemberSet(areaConfig, activeAreas, "list");
     return effectiveReminders.filter((r) => {
       if (r.listId != null && ignored.has(r.listId)) return false;
       if (areaSet) return r.listId != null && areaSet.has(r.listId);
       return true;
     });
-  }, [effectiveReminders, activeArea, areaConfig, settings.ignoredListIds]);
+  }, [effectiveReminders, activeAreas, areaConfig, settings.ignoredListIds]);
 
   // Areas selectable only when they have at least one *visible* calendar/list.
   const availableAreas = useMemo(() => {
@@ -547,18 +579,22 @@ function Planner() {
       areaReviewedAt: { ...(settings.areaReviewedAt ?? {}), [id]: new Date().toISOString() },
     });
 
+  // Drop any selected area that no longer has visible members; fall back to "all".
   useEffect(() => {
-    if (activeArea !== "all" && !availableAreas.some((a) => a.id === activeArea)) {
-      setActiveArea("all");
-    }
-  }, [availableAreas, activeArea]);
+    setActiveAreas((prev) => {
+      if (prev.includes("all")) return prev;
+      const pruned = prev.filter((id) => availableAreas.some((a) => a.id === id));
+      if (pruned.length === prev.length) return prev;
+      return pruned.length ? pruned : ["all"];
+    });
+  }, [availableAreas]);
 
   // On startup, land on the first configured area rather than "All Areas".
   const didInitArea = useRef(false);
   useEffect(() => {
     if (!didInitArea.current && availableAreas.length > 0) {
       didInitArea.current = true;
-      setActiveArea(availableAreas[0].id);
+      setActiveAreas([availableAreas[0].id]);
     }
   }, [availableAreas]);
 
@@ -613,12 +649,14 @@ function Planner() {
       if (id === "view-daily") selectSection("today");
       else if (id === "view-weekly") selectSection("weekly");
       else if (id === "view-planner") selectSection("planner");
+      else if (id === "toggle-hidden-events") toggleShowHidden();
       else if (id === "area-next" || id === "area-prev") {
         const { activeArea: aa, availableAreas: areas } = menuStateRef.current;
         const cycle = ["all", ...areas.map((a) => a.id)];
         const i = Math.max(0, cycle.indexOf(aa));
         const dir = id === "area-next" ? 1 : -1;
-        setActiveArea(cycle[(i + dir + cycle.length) % cycle.length]);
+        // Keyboard cycling collapses any multi-selection to a single area.
+        setActiveAreas([cycle[(i + dir + cycle.length) % cycle.length]]);
       } else if (id.startsWith("filter-")) {
         const status = id.slice("filter-".length) as StatusFilter;
         const aa = menuStateRef.current.activeArea;
@@ -851,6 +889,18 @@ function Planner() {
         ),
       },
       rescheduleNode((dt) => rescheduleEvent(event, dt), anchor),
+      ...(event.id
+        ? [
+            {
+              id: "hide",
+              label: isHidden(event.id) ? "Unhide event" : "Hide event",
+              icon: isHidden(event.id) ? Eye : EyeOff,
+              separatorBefore: true,
+              onSelect: () =>
+                isHidden(event.id) ? unhide(event.id!) : hide(event.id!),
+            },
+          ]
+        : []),
       {
         id: "delete",
         label: "Delete",
@@ -1230,21 +1280,22 @@ function Planner() {
         )?.id
       : undefined;
 
-  // Reminder groups available to the panel's group filter (scoped to the area).
+  // Reminder groups available to the panel's group filter (scoped to the selection).
   const availableGroups = useMemo(() => {
-    if (activeArea === "all") return visibleLists;
-    const set = new Set(areaMembers(areaConfig, activeArea).listIds);
+    const set = selectedMemberSet(areaConfig, activeAreas, "list");
+    if (!set) return visibleLists;
     return visibleLists.filter((c) => set.has(c.id));
-  }, [visibleLists, activeArea, areaConfig]);
+  }, [visibleLists, activeAreas, areaConfig]);
 
   return (
-    <div className="flex h-full">
+    <div className="flex h-full flex-col">
+      <div className="flex min-h-0 flex-1">
       <AppSidebar
         section={section}
         onSelect={selectSection}
         areas={availableAreas}
-        activeArea={activeArea}
-        onSelectArea={setActiveArea}
+        selectedAreas={activeAreas}
+        onSelectArea={selectArea}
         onOpenAreas={() => openSettings("areas")}
         onOpenSettings={() => openSettings("general")}
         onOpenSync={() => openSettings("sync")}
@@ -1262,7 +1313,6 @@ function Planner() {
       />
 
       <main className="flex min-w-0 flex-1 flex-col">
-        {update && <UpdateBanner update={update} onDismiss={dismissUpdate} />}
         <PlannerToolbar
           title={SECTION_TITLE[section]}
           label={viewLabel(view, anchor, weekStartsOn)}
@@ -1319,6 +1369,7 @@ function Planner() {
                 days={days}
                 events={filteredEvents}
                 reminders={filteredReminders}
+                hiddenEventIds={showHidden ? hiddenIds : undefined}
                 zoom={gridZoom}
                 onZoomChange={setGridZoom}
                 onEditEvent={(ev) => openEventEditor(ev)}
@@ -1423,6 +1474,20 @@ function Planner() {
           )}
         </div>
       </main>
+      </div>
+
+      {/* Footer notices pinned to the bottom of the window. */}
+      {activeAreas.length > 1 && (
+        <Banner variant="info" icon={Layers}>
+          Showing {activeAreas.length} areas combined —{" "}
+          <span className="font-medium">
+            {activeAreas
+              .map((id) => AREAS.find((a) => a.id === id)?.label ?? id)
+              .join(", ")}
+          </span>
+        </Banner>
+      )}
+      {update && <UpdateBanner update={update} onDismiss={dismissUpdate} />}
 
       <SettingsDialog
         open={settingsOpen}

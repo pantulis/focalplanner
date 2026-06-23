@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { addMinutes, format, parseISO, startOfDay } from "date-fns";
-import { Circle, CircleCheck, MapPin, MoveHorizontal, Repeat, Video } from "lucide-react";
+import { Circle, CircleCheck, EyeOff, MapPin, MoveHorizontal, Repeat, Video } from "lucide-react";
 import type { EventDto, ReminderDto } from "@/lib/api";
 import { findMeetingLink } from "@/lib/meeting";
 import {
@@ -25,6 +25,8 @@ interface Props {
   days: Date[];
   events: EventDto[] | undefined;
   reminders: ReminderDto[] | undefined;
+  /** Ids of locally-hidden events to render faded (only set when revealing hidden). */
+  hiddenEventIds?: Set<string>;
   /** Vertical-zoom multiplier of the hour grid (1 = 100%). */
   zoom: number;
   onZoomChange: (zoom: number) => void;
@@ -67,6 +69,8 @@ const RSVP_COLOR = "#9ca3af";
 const SNAP = 15; // minutes
 /** Flex-grow weight for a column the user chose to give more space. */
 const COLUMN_EXPAND = 1.7;
+/** Narrower weight for past days in multi-day (weekly) views. */
+const COLUMN_PAST = 0.7;
 
 type DragMode = "move" | "resize-start" | "resize-end";
 
@@ -128,6 +132,7 @@ export function TimeGridView({
   days,
   events,
   reminders,
+  hiddenEventIds,
   zoom,
   onZoomChange,
   cloneGroups,
@@ -404,8 +409,14 @@ export function TimeGridView({
   }
 
   // Tint Saturday/Sunday columns (only meaningful in multi-day / week view).
-  const weekendClass = (d: Date) =>
-    days.length > 1 && (d.getDay() === 0 || d.getDay() === 6) ? "bg-muted/40" : "";
+  // Per-column background tint (multi-day views only): today stands out with a
+  // primary tint; weekends get a subtle grey. Today wins over weekend.
+  const columnTint = (d: Date) => {
+    if (days.length <= 1) return "";
+    if (isToday(d)) return "bg-primary/[0.07]";
+    if (d.getDay() === 0 || d.getDay() === 6) return "bg-muted/40";
+    return "";
+  };
 
   const dragId = drag?.dragId ?? null;
   const anyAllDay = days.some((d) => dayAllDayEvents(evs, d).length > 0);
@@ -438,7 +449,14 @@ export function TimeGridView({
 
   // Per-view (transient) choice to give one day column more horizontal space.
   const [expandedDay, setExpandedDay] = useState<number | null>(null);
-  const grow = (i: number) => (days.length > 1 && expandedDay === i ? COLUMN_EXPAND : 1);
+  const todayStart = startOfDay(new Date()).getTime();
+  const grow = (i: number) => {
+    if (days.length <= 1) return 1;
+    if (expandedDay === i) return COLUMN_EXPAND;
+    // Past days get slightly less horizontal space than today/upcoming days.
+    if (startOfDay(days[i]).getTime() < todayStart) return COLUMN_PAST;
+    return 1;
+  };
   // Shared grid template so the header, all-day, time-grid and all-day-tasks rows
   // align perfectly (and never overflow) regardless of which column is expanded.
   // First track = the 56px (w-14) time/label gutter; then one track per day.
@@ -454,10 +472,13 @@ export function TimeGridView({
             key={d.toISOString()}
             className={cn(
               "group relative min-w-0 flex-1 border-l border-border px-2 py-1.5 text-center",
-              weekendClass(d),
+              columnTint(d),
             )}
             style={{ flexGrow: grow(i) }}
           >
+            {days.length > 1 && isToday(d) && (
+              <span className="pointer-events-none absolute inset-x-0 top-0 h-0.5 bg-primary" />
+            )}
             {days.length > 1 && (
               <button
                 type="button"
@@ -508,7 +529,7 @@ export function TimeGridView({
               key={d.toISOString()}
               className={cn(
                 "min-h-7 min-w-0 flex-1 space-y-0.5 overflow-y-auto border-l border-border p-1",
-                weekendClass(d),
+                columnTint(d),
               )}
               style={{ flexGrow: grow(i) }}
             >
@@ -581,7 +602,7 @@ export function TimeGridView({
                   data-grid-day={dayIndex}
                   className={cn(
                     "relative flex-1 border-l border-border",
-                    weekendClass(d),
+                    columnTint(d),
                     dropPreview?.day === dayIndex && "ring-2 ring-inset ring-primary/60",
                   )}
                   style={{ flexGrow: grow(dayIndex) }}
@@ -665,6 +686,9 @@ export function TimeGridView({
                           offsetMin={visStartMin}
                           hourHeight={hourPx}
                           dimmed={active && b.id === dragId}
+                          faded={
+                            !!b.event?.id && (hiddenEventIds?.has(b.event.id) ?? false)
+                          }
                           onBeginDrag={(e, mode) => beginDrag(e, b, dayIndex, mode)}
                           onEdit={() => b.event && onEditEvent(b.event)}
                           onContextMenu={(e) => {
@@ -746,7 +770,7 @@ export function TimeGridView({
             style={{ flexGrow: grow(dayIndex) }}
             className={cn(
               "flex min-w-0 flex-1 flex-col gap-0.5 overflow-y-auto border-l border-border p-1",
-              weekendClass(d),
+              columnTint(d),
               (allDayTarget === dayIndex || allDayHighlightDay === dayIndex) &&
                 "bg-primary/10 ring-2 ring-inset ring-primary/50",
             )}
@@ -918,6 +942,7 @@ function EventBlock({
   offsetMin,
   hourHeight,
   dimmed,
+  faded,
   onBeginDrag,
   onEdit,
   onContextMenu,
@@ -928,6 +953,8 @@ function EventBlock({
   offsetMin: number;
   hourHeight: number;
   dimmed: boolean;
+  /** Locally-hidden event revealed via the toggle: shown faded but interactive. */
+  faded?: boolean;
   onBeginDrag: (e: React.PointerEvent, mode: DragMode) => void;
   onEdit: () => void;
   onContextMenu: (e: React.MouseEvent) => void;
@@ -948,9 +975,15 @@ function EventBlock({
   // diagonal zebra stripes — subdued for the fill, solid for the left bar.
   const clones = block.cloneColors;
   const isClone = !!clones && clones.length >= 2;
+  // Composite the (translucent) fill over the opaque app background so a tinted
+  // column behind the block (today / weekend) never bleeds through and shifts the
+  // event's color.
   const fillStyle = isClone
-    ? { backgroundImage: zebra(clones!, 8, tint) }
-    : { backgroundColor: tint(fill) };
+    ? { backgroundColor: "var(--background)", backgroundImage: zebra(clones!, 8, tint) }
+    : {
+        backgroundColor: "var(--background)",
+        backgroundImage: `linear-gradient(${tint(fill)}, ${tint(fill)})`,
+      };
   const barStyle = isClone
     ? { backgroundImage: zebra(clones!, 6, (c: string) => c) }
     : { backgroundColor: bar };
@@ -958,7 +991,7 @@ function EventBlock({
   return (
     <motion.div
       initial={POOF_INITIAL}
-      animate={dimmed ? { opacity: 0 } : POOF_ANIMATE}
+      animate={dimmed ? { opacity: 0 } : { ...POOF_ANIMATE, opacity: faded ? 0.4 : 1 }}
       exit={POOF_EXIT}
       transition={POOF_TRANSITION}
       onPointerDown={(e) => draggable && onBeginDrag(e, "move")}
@@ -992,6 +1025,7 @@ function EventBlock({
           </span>
         )}
         <span className="min-w-0 flex-1 truncate">{title}</span>
+        {faded && <EyeOff className="size-3 shrink-0 opacity-70" />}
         {block.event?.recurring && <Repeat className="size-3 shrink-0 opacity-70" />}
         {hasMeeting && <Video className="size-3 shrink-0 opacity-70" />}
       </div>

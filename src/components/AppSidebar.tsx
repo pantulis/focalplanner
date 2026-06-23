@@ -33,8 +33,9 @@ interface Props {
   section: Section;
   onSelect: (section: Section) => void;
   areas: Area[];
-  activeArea: string;
-  onSelectArea: (id: string) => void;
+  /** Every selected area (multi-select); usually one. Drives row highlighting. */
+  selectedAreas: string[];
+  onSelectArea: (id: string, additive?: boolean) => void;
   onOpenAreas: () => void;
   onOpenSettings: () => void;
   onOpenSync: () => void;
@@ -57,7 +58,7 @@ interface Props {
 /** Drag-to-reorder list of areas (pointer-based; HTML5 DnD is flaky in WKWebView). */
 function SortableAreas({
   areas,
-  activeArea,
+  selectedAreas,
   onSelectArea,
   onReorder,
   showReview = false,
@@ -66,8 +67,8 @@ function SortableAreas({
   onMarkReviewed,
 }: {
   areas: Area[];
-  activeArea: string;
-  onSelectArea: (id: string) => void;
+  selectedAreas: string[];
+  onSelectArea: (id: string, additive?: boolean) => void;
   onReorder: (ids: string[]) => void;
   /** Planner view: show per-area review status + a "mark reviewed" checkmark. */
   showReview?: boolean;
@@ -106,7 +107,8 @@ function SortableAreas({
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       if (!active) {
-        onSelectArea(area.id); // no movement → treat as a click
+        // no movement → treat as a click; shift/⌘ adds to the selection
+        onSelectArea(area.id, ev.shiftKey || ev.metaKey);
       } else {
         const to = indexForY(ev.clientY);
         const ids = areas.map((a) => a.id);
@@ -137,7 +139,7 @@ function SortableAreas({
               onPointerDown={(e) => startDrag(e, a)}
               className={cn(
                 "group flex w-full cursor-default select-none items-center gap-2 rounded-md px-2.5 py-1.5 text-sm transition-colors",
-                activeArea === a.id
+                selectedAreas.includes(a.id)
                   ? "bg-accent font-medium text-foreground"
                   : "text-foreground/70 hover:bg-accent/60",
                 drag?.id === a.id && "opacity-40",
@@ -277,7 +279,7 @@ export function AppSidebar({
   section,
   onSelect,
   areas,
-  activeArea,
+  selectedAreas,
   onSelectArea,
   onOpenAreas,
   onOpenSettings,
@@ -352,7 +354,7 @@ export function AppSidebar({
       <div className="mt-1 min-h-0 flex-1 space-y-0.5 overflow-y-auto pl-2">
         <SortableAreas
           areas={areas}
-          activeArea={activeArea}
+          selectedAreas={selectedAreas}
           onSelectArea={onSelectArea}
           onReorder={onReorderAreas}
           showReview={section === "planner"}
@@ -369,7 +371,7 @@ export function AppSidebar({
           </button>
         )}
         <AreaItem
-          active={activeArea === "all"}
+          active={selectedAreas.includes("all")}
           label="All Areas"
           icon={Layers}
           onClick={() => onSelectArea("all")}

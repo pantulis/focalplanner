@@ -4,8 +4,8 @@ mod github_sync;
 mod models;
 mod tray;
 
-use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
-use tauri::Emitter;
+use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
+use tauri::{Emitter, Manager};
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -36,6 +36,16 @@ fn about_info() -> AboutInfo {
 
 #[cfg(target_os = "macos")]
 mod change_observer;
+
+/// Reflect the webview's "show hidden events" toggle as a checkmark in the
+/// native View menu. The webview owns the (persisted) state; this just mirrors it.
+#[tauri::command]
+fn set_hidden_events_checked(
+    item: tauri::State<'_, CheckMenuItem<tauri::Wry>>,
+    checked: bool,
+) {
+    let _ = item.set_checked(checked);
+}
 
 /// Start forwarding EventKit change notifications to the webview.
 #[tauri::command]
@@ -202,6 +212,17 @@ pub fn run() {
                     &PredefinedMenuItem::select_all(handle, None)?,
                 ],
             )?;
+            // Checkable toggle; its checkmark is kept in sync with the webview's
+            // persisted "show hidden events" state via `set_hidden_events_checked`.
+            let show_hidden = CheckMenuItem::with_id(
+                handle,
+                "toggle-hidden-events",
+                "Show Hidden Events",
+                true,
+                false,
+                Some("CmdOrCtrl+Shift+H"),
+            )?;
+            handle.manage(show_hidden.clone());
             let view_menu = Submenu::with_items(
                 handle,
                 "View",
@@ -213,6 +234,8 @@ pub fn run() {
                     &PredefinedMenuItem::separator(handle)?,
                     &MenuItem::with_id(handle, "area-next", "Next Area of Focus", true, Some("CmdOrCtrl+]"))?,
                     &MenuItem::with_id(handle, "area-prev", "Previous Area of Focus", true, Some("CmdOrCtrl+["))?,
+                    &PredefinedMenuItem::separator(handle)?,
+                    &show_hidden,
                 ],
             )?;
             let reminders_menu = Submenu::with_items(
@@ -234,12 +257,17 @@ pub fn run() {
                 let _ = app.emit("menu-about", ());
             } else if id == "settings" {
                 let _ = app.emit("menu-settings", ());
-            } else if id.starts_with("view-") || id.starts_with("area-") || id.starts_with("filter-") {
+            } else if id.starts_with("view-")
+                || id.starts_with("area-")
+                || id.starts_with("filter-")
+                || id.starts_with("toggle-")
+            {
                 let _ = app.emit("menu-action", id.to_string());
             }
         })
         .invoke_handler(tauri::generate_handler![
             about_info,
+            set_hidden_events_checked,
             start_change_observer,
             open_calendar,
             github_device_start,

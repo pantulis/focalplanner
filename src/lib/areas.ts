@@ -81,6 +81,28 @@ export function areaMembers(config: AreaConfig, areaId: string): AreaMembers {
   return config[areaId] ?? { calendarIds: [], listIds: [] };
 }
 
+/**
+ * The set of member ids (of `kind`) across a multi-area selection, for display
+ * filtering. Returns `null` when no membership filter should apply — i.e. the
+ * selection contains the "all" pseudo-area (or is empty). Otherwise the union of
+ * every selected area's members.
+ */
+export function selectedMemberSet(
+  config: AreaConfig,
+  areaIds: string[],
+  kind: MemberKind,
+): Set<string> | null {
+  if (areaIds.length === 0 || areaIds.includes("all")) return null;
+  const out = new Set<string>();
+  for (const id of areaIds) {
+    const members = areaMembers(config, id);
+    for (const m of kind === "calendar" ? members.calendarIds : members.listIds) {
+      out.add(m);
+    }
+  }
+  return out;
+}
+
 export function isMember(
   config: AreaConfig,
   areaId: string,
