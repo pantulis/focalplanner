@@ -219,6 +219,18 @@ function Planner() {
     setSettingsOpen(true);
   };
 
+  // Native "Settings…" menu item opens the in-app Settings dialog.
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    listen("menu-settings", () => {
+      setSettingsPane("general");
+      setSettingsOpen(true);
+    }).then((un) => {
+      unlisten = un;
+    });
+    return () => unlisten?.();
+  }, []);
+
   const view: PlannerView = section === "weekly" ? "week" : "day";
   const weekStartsOn = settings.weekStartsOn;
   const range = useMemo(

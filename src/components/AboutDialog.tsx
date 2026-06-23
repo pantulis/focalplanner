@@ -66,6 +66,13 @@ export function AboutDialog({ open, onClose, connected, login }: Props) {
               : "—"}
           </span>
         </div>
+
+        <div className="flex items-center justify-between">
+          <span className="text-muted-foreground">Build type</span>
+          <span className="tabular-nums">
+            {info ? (info.devBuild ? "Debug" : "Release") : "—"}
+          </span>
+        </div>
       </div>
 
       {info?.devBuild && (

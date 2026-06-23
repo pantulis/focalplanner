@@ -174,12 +174,15 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::new().build())
         .menu(|handle| {
             let about = MenuItem::with_id(handle, "about", "About FocalPlanner", true, None::<&str>)?;
+            let settings = MenuItem::with_id(handle, "settings", "Settings…", true, Some("CmdOrCtrl+,"))?;
             let app_menu = Submenu::with_items(
                 handle,
                 "FocalPlanner",
                 true,
                 &[
                     &about,
+                    &PredefinedMenuItem::separator(handle)?,
+                    &settings,
                     &PredefinedMenuItem::separator(handle)?,
                     &PredefinedMenuItem::hide(handle, None)?,
                     &PredefinedMenuItem::quit(handle, None)?,
@@ -229,6 +232,8 @@ pub fn run() {
             let id = event.id().as_ref();
             if id == "about" {
                 let _ = app.emit("menu-about", ());
+            } else if id == "settings" {
+                let _ = app.emit("menu-settings", ());
             } else if id.starts_with("view-") || id.starts_with("area-") || id.starts_with("filter-") {
                 let _ = app.emit("menu-action", id.to_string());
             }
