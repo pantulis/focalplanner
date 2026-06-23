@@ -16,6 +16,7 @@ import {
   Eye,
   EyeOff,
   Layers,
+  Lightbulb,
   ListTodo,
   Moon,
   Pencil,
@@ -55,6 +56,7 @@ import {
 } from "@/lib/planner";
 import { AREAS, areaMembers, selectedMemberSet, useAreaConfig } from "@/lib/areas";
 import { useHiddenEvents } from "@/lib/hiddenEvents";
+import { pickStartupTip } from "@/lib/tips";
 import {
   TIMES_OF_DAY,
   rescheduleDate,
@@ -203,6 +205,14 @@ function Planner() {
   useEffect(() => {
     api.setHiddenEventsChecked(showHidden);
   }, [showHidden]);
+  // Rotating startup tip shown in the footer (once settings have loaded).
+  const [tip, setTip] = useState<string | null>(null);
+  const tipPicked = useRef(false);
+  useEffect(() => {
+    if (tipPicked.current || !settingsLoaded) return;
+    tipPicked.current = true;
+    if (settings.showTipsOnStartup) setTip(pickStartupTip());
+  }, [settingsLoaded, settings.showTipsOnStartup]);
   // Reminder list/status filters remembered per area of focus.
   const [areaFilters, setAreaFilters] = useState<
     Record<string, { list: string; status: StatusFilter }>
@@ -1477,6 +1487,26 @@ function Planner() {
       </div>
 
       {/* Footer notices pinned to the bottom of the window. */}
+      {tip && (
+        <Banner
+          variant="note"
+          icon={Lightbulb}
+          onDismiss={() => setTip(null)}
+          action={
+            <button
+              onClick={() => {
+                updateSettings({ showTipsOnStartup: false });
+                setTip(null);
+              }}
+              className="shrink-0 rounded-md border border-yellow-600/40 bg-yellow-50/60 px-2.5 py-1 text-xs font-medium text-yellow-900 shadow-sm transition-colors hover:bg-yellow-200/70 dark:border-yellow-300/30 dark:bg-yellow-400/10 dark:text-yellow-100 dark:hover:bg-yellow-400/20"
+            >
+              Don't show on startup
+            </button>
+          }
+        >
+          <span className="font-medium">Tip:</span> {tip}
+        </Banner>
+      )}
       {activeAreas.length > 1 && (
         <Banner variant="info" icon={Layers}>
           Showing {activeAreas.length} areas combined —{" "}

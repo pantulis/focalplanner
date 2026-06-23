@@ -179,6 +179,14 @@ export function SettingsDialog({
                 Show current event &amp; today's agenda in the menu bar
               </label>
 
+              <label className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  checked={settings.showTipsOnStartup}
+                  onCheckedChange={(c) => onChange({ showTipsOnStartup: c })}
+                />
+                Show a tip on startup
+              </label>
+
               <div className="space-y-1.5">
                 <Label>Week begins on</Label>
                 <Select

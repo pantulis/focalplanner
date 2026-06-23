@@ -11,6 +11,8 @@ export type PlannerLayout = "swimlanes" | "pipeline" | "horizon";
 
 export interface Settings {
   showCompletedReminders: boolean;
+  /** Show a rotating feature tip in the footer on startup. */
+  showTipsOnStartup: boolean;
   /** 0 = Sunday, 1 = Monday */
   weekStartsOn: 0 | 1;
   workdayStart: number;
@@ -51,6 +53,7 @@ export interface Settings {
 
 export const DEFAULT_SETTINGS: Settings = {
   showCompletedReminders: false,
+  showTipsOnStartup: true,
   weekStartsOn: 0,
   workdayStart: 9,
   workdayEnd: 18,

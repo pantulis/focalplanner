@@ -18,6 +18,9 @@ const bannerVariants = cva(
           "border-amber-500/20 bg-amber-500/10 text-foreground [&_.banner-accent]:text-amber-600 dark:[&_.banner-accent]:text-amber-400",
         destructive:
           "border-destructive/20 bg-destructive/10 text-foreground [&_.banner-accent]:text-destructive",
+        // Sticky-note look: solid pale yellow, like a Post-it.
+        note:
+          "border-yellow-300/70 bg-yellow-100 text-yellow-900 [&_.banner-accent]:text-yellow-600 dark:border-yellow-500/25 dark:bg-yellow-400/15 dark:text-yellow-100 dark:[&_.banner-accent]:text-yellow-300",
       },
     },
     defaultVariants: { variant: "info" },

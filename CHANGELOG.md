@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 project adheres to [Semantic Versioning](https://semver.org/). Update this file in
 the same commit that bumps the version for each release.
 
+## [1.3.0] — 2026-06-23
+
+### Added
+- **Startup tips.** A rotating, lightly-worded tip appears in the footer on launch
+  (styled like a yellow Post-it). Dismiss it for the session, or click **Don't show
+  on startup** to turn it off. A synced **Show a tip on startup** preference lives in
+  Settings → General.
+
 ## [1.2.0] — 2026-06-23
 
 ### Added
