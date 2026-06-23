@@ -198,13 +198,23 @@ pub fn access_status() -> EkResult<AccessStatus> {
 
 /// Prompt for full access to both entity types, then report the resulting status.
 pub fn request_access() -> EkResult<AccessStatus> {
-    with_store(|store| {
-        // Ignore the boolean/errors here; the authoritative answer is the status below.
-        let _ = store.request_full_access_to_events();
-        let _ = store.request_full_access_to_reminders();
-        Ok(())
+    // The completion-handler booleans are authoritative the instant the user responds.
+    // The class-method authorizationStatus (used by access_status) can still report
+    // notDetermined within the same process right after a grant, which would otherwise
+    // leave the permission gate stuck until the app is relaunched.
+    let (events_granted, reminders_granted) = with_store(|store| {
+        let e = store.request_full_access_to_events().unwrap_or(false);
+        let r = store.request_full_access_to_reminders().unwrap_or(false);
+        Ok((e, r))
     })?;
-    access_status()
+    let mut status = access_status()?;
+    if events_granted && status.events != "fullAccess" {
+        status.events = "fullAccess".to_string();
+    }
+    if reminders_granted && status.reminders != "fullAccess" {
+        status.reminders = "fullAccess".to_string();
+    }
+    Ok(status)
 }
 
 // ── Calendars / lists ─────────────────────────────────────────────────────

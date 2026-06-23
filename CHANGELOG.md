@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 project adheres to [Semantic Versioning](https://semver.org/). Update this file in
 the same commit that bumps the version for each release.
 
+## [1.1.2] — 2026-06-23
+
+### Fixed
+- **Permission gate no longer stalls after the first grant.** Granting Calendar
+  and Reminders access on first launch now continues straight into the app.
+  Previously the gate could stay on screen until the app was relaunched, because
+  the post-grant status was read from `EKEventStore.authorizationStatus`, which can
+  briefly report `notDetermined` within the same process right after a grant. The
+  request now trusts EventKit's completion-handler result instead.
+
+## [1.1.1] — 2026-06-23
+
+### Fixed
+- **Calendar/Reminders access in signed builds.** Added the EventKit resource
+  entitlements (`com.apple.security.personal-information.calendars` / `.reminders`)
+  so the permission prompt appears under the hardened runtime; without them macOS
+  silently denied access in code-signed builds.
+
+### Added
+- The About dialog now shows the build type, and a **Settings…** item was added to
+  the application menu.
+
 ## [1.1.0] — 2026-06-22
 
 ### Added
