@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  Under the Hardened Runtime (which Tauri enables when code signing, even
+	  ad-hoc), macOS refuses to even show the Calendar/Reminders permission
+	  prompt unless the app carries these resource-access entitlements. Without
+	  them tccd logs "Prompting policy for hardened runtime; service:
+	  kTCCServiceCalendar requires entitlement
+	  com.apple.security.personal-information.calendars but it is missing" and
+	  silently denies access. These entitlements are valid for a hardened,
+	  non-sandboxed app and require no Apple Developer account.
+	-->
+	<key>com.apple.security.personal-information.calendars</key>
+	<true/>
+	<key>com.apple.security.personal-information.reminders</key>
+	<true/>
+</dict>
+</plist>
