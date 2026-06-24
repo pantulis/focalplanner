@@ -129,11 +129,20 @@ function Planner() {
   const { settings, update: updateSettings, loaded: settingsLoaded } = useSettings();
   const queryClient = useQueryClient();
   const { update, dismiss: dismissUpdate } = useUpdateCheck();
+  // Locally-hidden calendar events (view-only, persisted in localStorage).
+  const { hiddenIds, isHidden, hide, unhide, showHidden, toggleShowHidden } =
+    useHiddenEvents();
+  // Mirror the toggle into the native View-menu checkmark (on mount + on change).
+  useEffect(() => {
+    api.setHiddenEventsChecked(showHidden);
+  }, [showHidden]);
 
   useMenubarTray({
     enabled: settingsLoaded && settings.menubarEnabled,
     ignoredCalendarIds: settings.ignoredCalendarIds,
     ignoredListIds: settings.ignoredListIds,
+    // Hidden events stay out of the menu bar too (unless "show hidden" is on).
+    hiddenEventIds: showHidden ? [] : [...hiddenIds],
     showNext: settings.menubarShowNext,
     nextWindowHours: settings.menubarNextWindowHours,
     showTimers: settings.menubarShowTimers,
@@ -203,13 +212,6 @@ function Planner() {
     });
   // Ephemeral vertical zoom of the time grid (1 = 100%); resets on relaunch.
   const [gridZoom, setGridZoom] = useState(1);
-  // Locally-hidden calendar events (view-only, persisted in localStorage).
-  const { hiddenIds, isHidden, hide, unhide, showHidden, toggleShowHidden } =
-    useHiddenEvents();
-  // Mirror the toggle into the native View-menu checkmark (on mount + on change).
-  useEffect(() => {
-    api.setHiddenEventsChecked(showHidden);
-  }, [showHidden]);
   // Rotating startup tip shown in the footer (once settings have loaded).
   const [tip, setTip] = useState<string | null>(null);
   const tipPicked = useRef(false);
@@ -229,6 +231,10 @@ function Planner() {
       [activeArea]: { ...(prev[activeArea] ?? { list: "all", status: "today" }), ...patch },
     }));
   const [showReminders, setShowReminders] = useState(true);
+  // Mirror the Reminders-sidebar visibility into the native Reminders-menu checkmark.
+  useEffect(() => {
+    api.setRemindersChecked(showReminders);
+  }, [showReminders]);
   // User-resized heights of the time grid's all-day sections. Session-only (not a
   // saved preference) but kept across areas and the daily/weekly views; null = auto.
   const [allDayEventsHeight, setAllDayEventsHeight] = useState<number | null>(null);
@@ -269,6 +275,20 @@ function Planner() {
     listen("menu-settings", () => {
       setSettingsPane("general");
       setSettingsOpen(true);
+    }).then((un) => {
+      unlisten = un;
+    });
+    return () => unlisten?.();
+  }, []);
+
+  // The tray dropdown's "Show NEXT event" toggle flips and persists the setting
+  // here (a ref keeps the latest value for the once-registered listener).
+  const showNextRef = useRef(settings.menubarShowNext);
+  showNextRef.current = settings.menubarShowNext;
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    listen("tray-toggle-shownext", () => {
+      updateSettings({ menubarShowNext: !showNextRef.current });
     }).then((un) => {
       unlisten = un;
     });
@@ -665,6 +685,7 @@ function Planner() {
       else if (id === "view-weekly") selectSection("weekly");
       else if (id === "view-planner") selectSection("planner");
       else if (id === "toggle-hidden-events") toggleShowHidden();
+      else if (id === "toggle-reminders") setShowReminders((v) => !v);
       else if (id === "area-next" || id === "area-prev") {
         const { activeArea: aa, availableAreas: areas } = menuStateRef.current;
         const cycle = ["all", ...areas.map((a) => a.id)];
@@ -1395,6 +1416,7 @@ function Planner() {
                 }
                 onEmptyContextMenu={openEmptyEventMenu}
                 cloneGroups={eventClones}
+                areaConfig={areaConfig}
                 onCreateRange={(start, end, x, y) => showCreateMenu(start, end, x, y)}
                 onUpdateTimes={updateEventTimes}
                 onUpdateReminderDue={updateReminderDue}

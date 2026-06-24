@@ -151,6 +151,9 @@ export const api = {
   /** Reflect the "show hidden events" toggle as a checkmark in the native View menu. */
   setHiddenEventsChecked: (checked: boolean) =>
     invoke<void>("set_hidden_events_checked", { checked }).catch(() => {}),
+  /** Reflect the Reminders-sidebar visibility as a checkmark in the native Reminders menu. */
+  setRemindersChecked: (checked: boolean) =>
+    invoke<void>("set_reminders_checked", { checked }).catch(() => {}),
   openPrivacySettings: () => invoke<void>("open_privacy_settings"),
   openCalendar: (date?: string | null) =>
     invoke<void>("open_calendar", { date: date ?? null }),
@@ -160,6 +163,7 @@ export const api = {
     enabled: boolean;
     ignoredCalendarIds: string[];
     ignoredListIds: string[];
+    hiddenEventIds: string[];
     showNext: boolean;
     nextWindowHours: number;
     showTimers: boolean;

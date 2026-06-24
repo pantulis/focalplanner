@@ -131,9 +131,21 @@ export function FeatureTour({ open, onClose }: Props) {
         </div>
 
         <div className="flex items-center justify-between border-t border-border px-4 py-3">
-          <span className="text-xs text-muted-foreground">
-            {i + 1} / {STEPS.length}
-          </span>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-muted-foreground">
+              {i + 1} / {STEPS.length}
+            </span>
+            {!last && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onClose}
+                className="text-muted-foreground"
+              >
+                Skip tour
+              </Button>
+            )}
+          </div>
           <div className="flex items-center gap-2">
             {!first && (
               <Button variant="ghost" size="sm" onClick={() => setI((n) => n - 1)}>

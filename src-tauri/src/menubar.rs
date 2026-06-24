@@ -19,8 +19,6 @@ use crate::eventkit_service as svc;
 use crate::tray::{self, Pill, TrayItem};
 
 const REMINDER_ACTIVE_MS: i64 = 30 * 60 * 1000; // a reminder is "current" for 30 min
-const EVENT_ICON: &str = "📅";
-const REMINDER_ICON: &str = "📝";
 /// Safety refresh ceiling for the driver loop.
 const MAX_SLEEP_MS: u64 = 30_000;
 const MIN_SLEEP_MS: u64 = 1_000;
@@ -40,6 +38,9 @@ struct Config {
     enabled: bool,
     ignored_calendars: HashSet<String>,
     ignored_lists: HashSet<String>,
+    /// Locally-hidden calendar event ids (series-level), pushed from the webview.
+    /// Empty when the "show hidden events" reveal is on.
+    hidden_events: HashSet<String>,
     show_next: bool,
     next_window_ms: i64,
     show_timers: bool,
@@ -72,6 +73,7 @@ impl Driver {
         enabled: bool,
         ignored_calendars: Vec<String>,
         ignored_lists: Vec<String>,
+        hidden_events: Vec<String>,
         show_next: bool,
         next_window_ms: i64,
         show_timers: bool,
@@ -82,6 +84,7 @@ impl Driver {
         cfg.enabled = enabled;
         cfg.ignored_calendars = ignored_calendars.into_iter().collect();
         cfg.ignored_lists = ignored_lists.into_iter().collect();
+        cfg.hidden_events = hidden_events.into_iter().collect();
         cfg.show_next = show_next;
         cfg.next_window_ms = next_window_ms;
         cfg.show_timers = show_timers;
@@ -112,12 +115,13 @@ pub fn start(app: AppHandle, driver: Arc<Driver>) {
         let mut tick: u64 = 0;
         loop {
             // Snapshot config without holding the lock during the EventKit fetch.
-            let (enabled, ignored_cals, ignored_lists, opts, generation) = {
+            let (enabled, ignored_cals, ignored_lists, hidden_events, opts, generation) = {
                 let cfg = driver.cfg.lock().unwrap();
                 (
                     cfg.enabled,
                     cfg.ignored_calendars.clone(),
                     cfg.ignored_lists.clone(),
+                    cfg.hidden_events.clone(),
                     Opts {
                         show_next: cfg.show_next,
                         next_window_ms: cfg.next_window_ms,
@@ -139,8 +143,8 @@ pub fn start(app: AppHandle, driver: Arc<Driver>) {
             }
 
             let (highlight, items, sleep_ms) =
-                compute(&ignored_cals, &ignored_lists, &opts, tick);
-            tray::update(app.clone(), highlight, items);
+                compute(&ignored_cals, &ignored_lists, &hidden_events, &opts, tick);
+            tray::update(app.clone(), highlight, items, opts.show_next);
             tick = tick.wrapping_add(1);
 
             let cfg = driver.cfg.lock().unwrap();
@@ -222,6 +226,7 @@ struct Timed {
 fn compute(
     ignored_cals: &HashSet<String>,
     ignored_lists: &HashSet<String>,
+    hidden: &HashSet<String>,
     opts: &Opts,
     tick: u64,
 ) -> (Option<(Pill, String, String)>, Vec<TrayItem>, u64) {
@@ -239,6 +244,9 @@ fn compute(
 
     let mut all_day: Vec<TrayItem> = Vec::new();
     let mut timed: Vec<Timed> = Vec::new();
+    // Collapse cloned events (same title+time copied across calendars) to one,
+    // matching the webview's `cloneKey` (title + start + end).
+    let mut seen_clones: HashSet<String> = HashSet::new();
 
     for e in events {
         if let Some(cid) = &e.calendar_id {
@@ -246,13 +254,23 @@ fn compute(
                 continue;
             }
         }
+        // Locally-hidden events (unless the "show hidden" reveal is on, in which
+        // case the webview sends an empty hidden set).
+        if let Some(eid) = &e.id {
+            if hidden.contains(eid) {
+                continue;
+            }
+        }
+        if !seen_clones.insert(format!("{}|{}|{}", e.title, e.start, e.end)) {
+            continue; // a clone of an event we already added
+        }
         let title = if e.title.is_empty() { "(untitled)".to_string() } else { e.title };
         let id = e.id.unwrap_or_else(|| title.clone());
         if e.all_day {
             all_day.push(TrayItem {
                 kind: "event".into(),
                 id,
-                label: format!("{EVENT_ICON}  {title}"),
+                label: title,
             });
             continue;
         }
@@ -264,12 +282,18 @@ fn compute(
         if end_ms < now_ms {
             continue; // past
         }
-        let hhmm = e.start.get(11..16).unwrap_or("");
+        // EventKit returns RFC3339 UTC; show the time in the local zone (the raw
+        // `start[11..16]` slice would be UTC and off by the local offset).
+        let hhmm = Local
+            .timestamp_millis_opt(start_ms)
+            .single()
+            .map(|d| d.format("%H:%M").to_string())
+            .unwrap_or_default();
         timed.push(Timed {
             item: TrayItem {
                 kind: "event".into(),
                 id,
-                label: format!("{EVENT_ICON}  {hhmm}  {title}"),
+                label: format!("{hhmm}  {title}"),
             },
             start_ms,
             end_ms,
@@ -297,7 +321,7 @@ fn compute(
             all_day.push(TrayItem {
                 kind: "reminder".into(),
                 id,
-                label: format!("{REMINDER_ICON}  {title}"),
+                label: title,
             });
             continue;
         }
@@ -305,12 +329,13 @@ fn compute(
         if due_ms < now_ms {
             continue; // past
         }
+        // Reminder due strings are already local (`parse_local_ms`), so the slice is fine.
         let hhmm = due.get(11..16).unwrap_or("");
         timed.push(Timed {
             item: TrayItem {
                 kind: "reminder".into(),
                 id,
-                label: format!("{REMINDER_ICON}  {hhmm}  {title}"),
+                label: format!("{hhmm}  {title}"),
             },
             start_ms: due_ms,
             end_ms: due_ms + REMINDER_ACTIVE_MS,
@@ -346,9 +371,18 @@ fn compute(
         Some(highlights[(tick as usize) % highlights.len()].clone())
     };
 
-    let mut items: Vec<TrayItem> = Vec::with_capacity(all_day.len() + timed.len());
-    items.extend(all_day);
+    // Timed events/reminders first (chronological), then all-day items last, with a
+    // separator between the two groups when both are present.
+    let mut items: Vec<TrayItem> = Vec::with_capacity(timed.len() + all_day.len() + 1);
     items.extend(timed.iter().map(|t| t.item.clone()));
+    if !timed.is_empty() && !all_day.is_empty() {
+        items.push(TrayItem {
+            kind: "separator".into(),
+            id: String::new(),
+            label: String::new(),
+        });
+    }
+    items.extend(all_day);
 
     // Next transition: the soonest future start/end among visible items.
     let mut next: Option<i64> = None;

@@ -4,6 +4,8 @@ import { AnimatePresence, motion } from "framer-motion";
 import { addMinutes, format, parseISO, startOfDay } from "date-fns";
 import { Circle, CircleCheck, EyeOff, MapPin, MoveHorizontal, Repeat, Video } from "lucide-react";
 import type { EventDto, ReminderDto } from "@/lib/api";
+import { cloneKey } from "@/lib/clones";
+import { AREAS, isMember, type Area, type AreaConfig } from "@/lib/areas";
 import { findMeetingLink } from "@/lib/meeting";
 import {
   GridBlock,
@@ -32,6 +34,8 @@ interface Props {
   onZoomChange: (zoom: number) => void;
   /** Same event copied across calendars; matched members render as one clone block. */
   cloneGroups: Map<string, EventDto[]>;
+  /** Area-of-focus membership, for the hover card's per-calendar area pills. */
+  areaConfig: AreaConfig;
   onEditEvent: (event: EventDto) => void;
   onEditReminder: (reminder: ReminderDto) => void;
   onToggleReminder: (reminder: ReminderDto, completed: boolean) => void;
@@ -136,6 +140,7 @@ export function TimeGridView({
   zoom,
   onZoomChange,
   cloneGroups,
+  areaConfig,
   onEditEvent,
   onEditReminder,
   onToggleReminder,
@@ -823,7 +828,7 @@ export function TimeGridView({
         )}
       </div>
 
-      {hover && <HoverCard {...hover} />}
+      {hover && <HoverCard {...hover} cloneGroups={cloneGroups} areaConfig={areaConfig} />}
     </div>
   );
 }
@@ -838,7 +843,25 @@ interface ReminderHover {
 }
 type HoverInfo = EventHover | ReminderHover;
 
-function HoverCard({ x, y, info }: { x: number; y: number; info: HoverInfo }) {
+/** The areas of focus a calendar is assigned to (many-to-many; may be empty). */
+function areasForCalendar(config: AreaConfig, calendarId: string | null): Area[] {
+  if (!calendarId) return [];
+  return AREAS.filter((a) => isMember(config, a.id, "calendar", calendarId));
+}
+
+function HoverCard({
+  x,
+  y,
+  info,
+  cloneGroups,
+  areaConfig,
+}: {
+  x: number;
+  y: number;
+  info: HoverInfo;
+  cloneGroups: Map<string, EventDto[]>;
+  areaConfig: AreaConfig;
+}) {
   const flipX = x > window.innerWidth - 280;
   const style: CSSProperties = {
     left: flipX ? x - 14 : x + 14,
@@ -847,6 +870,11 @@ function HoverCard({ x, y, info }: { x: number; y: number; info: HoverInfo }) {
   };
 
   const color = (info.kind === "event" ? info.event.color : info.reminder.color) ?? FALLBACK_COLOR;
+  // When the hovered event is a clone (same event copied across calendars), list
+  // every calendar it lives in, each with a CLONED pill in that calendar's color.
+  const cloneMembers =
+    info.kind === "event" ? cloneGroups.get(cloneKey(info.event)) : undefined;
+  const isClone = !!cloneMembers && cloneMembers.length >= 2;
   let title: string;
   let typeLine: string;
   let when: string;
@@ -876,6 +904,11 @@ function HoverCard({ x, y, info }: { x: number; y: number; info: HoverInfo }) {
     recurring = r.recurring;
   }
 
+  // For events, show one row per calendar (all of them when cloned), each with
+  // its focus-area pill(s) alongside the calendar name.
+  const eventMembers: EventDto[] =
+    info.kind === "event" ? (isClone && cloneMembers ? cloneMembers : [info.event]) : [];
+
   return createPortal(
     <div
       className="pointer-events-none fixed z-[80] w-64 rounded-md border border-border bg-popover p-2.5 text-popover-foreground shadow-lg"
@@ -884,14 +917,40 @@ function HoverCard({ x, y, info }: { x: number; y: number; info: HoverInfo }) {
       <div className={cn("truncate text-sm font-semibold", completed && "line-through opacity-70")}>
         {title}
       </div>
-      <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
-        <span
-          className="size-2.5 shrink-0 rounded-full border border-black/10"
-          style={{ backgroundColor: color }}
-        />
-        <span className="truncate">{typeLine}</span>
-        {recurring && <Repeat className="size-3 shrink-0" />}
-      </div>
+      {info.kind === "event" ? (
+        <div className="mt-1 space-y-1">
+          {eventMembers.map((m, idx) => {
+            const areas = areasForCalendar(areaConfig, m.calendarId);
+            return (
+              <div
+                key={m.id ?? idx}
+                className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground"
+              >
+                {areas.map((a) => (
+                  <span
+                    key={a.id}
+                    className="shrink-0 rounded px-1.5 py-px text-[10px] font-medium text-white"
+                    style={{ backgroundColor: a.color }}
+                  >
+                    {a.label}
+                  </span>
+                ))}
+                <span className="truncate">{m.calendarTitle ?? "Unknown calendar"}</span>
+                {recurring && idx === 0 && <Repeat className="size-3 shrink-0" />}
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+          <span
+            className="size-2.5 shrink-0 rounded-full border border-black/10"
+            style={{ backgroundColor: color }}
+          />
+          <span className="truncate">{typeLine}</span>
+          {recurring && <Repeat className="size-3 shrink-0" />}
+        </div>
+      )}
       <div className="mt-0.5 text-xs text-muted-foreground">{when}</div>
       {location && (
         <div className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">

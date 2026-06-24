@@ -48,6 +48,18 @@ fn set_hidden_events_checked(
     let _ = item.set_checked(checked);
 }
 
+/// Newtype wrapper so the Reminders-sidebar CheckMenuItem can be managed
+/// alongside the hidden-events one without colliding on the shared
+/// `State<CheckMenuItem<Wry>>` type.
+struct RemindersCheckItem(CheckMenuItem<tauri::Wry>);
+
+/// Mirror the webview's Reminders-sidebar visibility as a checkmark in the
+/// native Reminders menu (counterpart of `set_hidden_events_checked`).
+#[tauri::command]
+fn set_reminders_checked(item: tauri::State<'_, RemindersCheckItem>, checked: bool) {
+    let _ = item.0.set_checked(checked);
+}
+
 /// Start forwarding EventKit change notifications to the webview.
 #[tauri::command]
 fn start_change_observer(app: tauri::AppHandle) {
@@ -133,6 +145,7 @@ fn tray_configure(
     enabled: bool,
     ignored_calendar_ids: Vec<String>,
     ignored_list_ids: Vec<String>,
+    hidden_event_ids: Vec<String>,
     show_next: bool,
     next_window_hours: f64,
     show_timers: bool,
@@ -143,6 +156,7 @@ fn tray_configure(
         enabled,
         ignored_calendar_ids,
         ignored_list_ids,
+        hidden_event_ids,
         show_next,
         (next_window_hours * 3_600_000.0) as i64,
         show_timers,
@@ -252,17 +266,30 @@ pub fn run() {
                     &MenuItem::with_id(handle, "view-weekly", "Weekly", true, Some("CmdOrCtrl+2"))?,
                     &MenuItem::with_id(handle, "view-planner", "Planner", true, Some("CmdOrCtrl+3"))?,
                     &PredefinedMenuItem::separator(handle)?,
-                    &MenuItem::with_id(handle, "area-next", "Next Area of Focus", true, Some("CmdOrCtrl+]"))?,
-                    &MenuItem::with_id(handle, "area-prev", "Previous Area of Focus", true, Some("CmdOrCtrl+["))?,
+                    &MenuItem::with_id(handle, "area-next", "Next Area of Focus", true, Some("CmdOrCtrl+Down"))?,
+                    &MenuItem::with_id(handle, "area-prev", "Previous Area of Focus", true, Some("CmdOrCtrl+Up"))?,
                     &PredefinedMenuItem::separator(handle)?,
                     &show_hidden,
                 ],
             )?;
+            // Checkable toggle for the Reminders sidebar; its checkmark mirrors the
+            // webview's `showReminders` state via `set_reminders_checked`. Default on.
+            let show_reminders = CheckMenuItem::with_id(
+                handle,
+                "toggle-reminders",
+                "Show Reminders Sidebar",
+                true,
+                true,
+                Some("CmdOrCtrl+Alt+S"),
+            )?;
+            handle.manage(RemindersCheckItem(show_reminders.clone()));
             let reminders_menu = Submenu::with_items(
                 handle,
                 "Reminders",
                 true,
                 &[
+                    &show_reminders,
+                    &PredefinedMenuItem::separator(handle)?,
                     &MenuItem::with_id(handle, "filter-today", "Today & Overdue", true, Some("CmdOrCtrl+Alt+1"))?,
                     &MenuItem::with_id(handle, "filter-scheduled", "Scheduled", true, Some("CmdOrCtrl+Alt+2"))?,
                     &MenuItem::with_id(handle, "filter-unscheduled", "Unscheduled", true, Some("CmdOrCtrl+Alt+3"))?,
@@ -288,6 +315,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             about_info,
             set_hidden_events_checked,
+            set_reminders_checked,
             start_change_observer,
             open_calendar,
             github_device_start,

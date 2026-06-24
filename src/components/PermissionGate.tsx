@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CalendarCheck, Loader2 } from "lucide-react";
+import { listen } from "@tauri-apps/api/event";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { AboutDialog } from "@/components/AboutDialog";
 import { api, type AccessStatus } from "@/lib/api";
 
 interface Props {
@@ -11,6 +13,19 @@ interface Props {
 
 export function PermissionGate({ status, onGranted }: Props) {
   const [requesting, setRequesting] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
+
+  // Make the About dialog reachable from the gate (button + native "About
+  // FocalPlanner" menu) so a user who is stuck here can read the app version to
+  // report issues.
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    listen("menu-about", () => setAboutOpen(true)).then((un) => {
+      unlisten = un;
+    });
+    return () => unlisten?.();
+  }, []);
+
   const denied =
     status.events === "denied" || status.reminders === "denied" ||
     status.events === "restricted" || status.reminders === "restricted";
@@ -55,7 +70,24 @@ export function PermissionGate({ status, onGranted }: Props) {
             Grant access
           </Button>
         )}
+
+        <div className="mt-6 border-t border-border pt-4">
+          <button
+            type="button"
+            onClick={() => setAboutOpen(true)}
+            className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+          >
+            About FocalPlanner
+          </button>
+        </div>
       </Card>
+
+      <AboutDialog
+        open={aboutOpen}
+        onClose={() => setAboutOpen(false)}
+        connected={false}
+        login={null}
+      />
     </div>
   );
 }

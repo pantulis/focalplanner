@@ -5,6 +5,7 @@ export interface MenubarConfig {
   enabled: boolean;
   ignoredCalendarIds: string[];
   ignoredListIds: string[];
+  hiddenEventIds: string[];
   showNext: boolean;
   nextWindowHours: number;
   showTimers: boolean;
