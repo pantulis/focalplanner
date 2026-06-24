@@ -34,7 +34,13 @@ import { Select } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
-export type Pane = "general" | "areas" | "calendars" | "appearance" | "sync";
+export type Pane =
+  | "general"
+  | "areas"
+  | "calendars"
+  | "menubar"
+  | "appearance"
+  | "sync";
 
 interface Props {
   open: boolean;
@@ -60,6 +66,7 @@ const PANES: { id: Pane; label: string }[] = [
   { id: "general", label: "General" },
   { id: "areas", label: "Areas of Focus" },
   { id: "calendars", label: "Calendars" },
+  { id: "menubar", label: "Menubar" },
   { id: "appearance", label: "Appearance" },
   { id: "sync", label: "Sync" },
 ];
@@ -169,14 +176,6 @@ export function SettingsDialog({
                   onCheckedChange={(c) => onChange({ showCompletedReminders: c })}
                 />
                 Show completed reminders
-              </label>
-
-              <label className="flex items-center gap-2 text-sm">
-                <Checkbox
-                  checked={settings.menubarEnabled}
-                  onCheckedChange={(c) => onChange({ menubarEnabled: c })}
-                />
-                Show current event &amp; today's agenda in the menu bar
               </label>
 
               <label className="flex items-center gap-2 text-sm">
@@ -328,6 +327,76 @@ export function SettingsDialog({
                 ignored={ignoredLists}
                 onToggle={toggleIgnoreList}
               />
+            </div>
+          )}
+
+          {pane === "menubar" && (
+            <div className="space-y-5">
+              <label className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  checked={settings.menubarEnabled}
+                  onCheckedChange={(c) => onChange({ menubarEnabled: c })}
+                />
+                Show events &amp; today's agenda in the menu bar
+              </label>
+
+              <label className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  checked={settings.menubarShowNext}
+                  onCheckedChange={(c) => onChange({ menubarShowNext: c })}
+                />
+                Show the next upcoming event (NEXT pill)
+              </label>
+
+              <div className="space-y-1.5">
+                <Label>Look ahead for the next event</Label>
+                <Select
+                  value={settings.menubarNextWindowHours}
+                  onChange={(e) =>
+                    onChange({ menubarNextWindowHours: Number(e.target.value) })
+                  }
+                  className="h-8 w-40 text-xs"
+                >
+                  {[1, 2, 3, 4, 6].map((h) => (
+                    <option key={h} value={h}>
+                      {h} hour{h > 1 ? "s" : ""}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+
+              <label className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  checked={settings.menubarShowTimers}
+                  onCheckedChange={(c) => onChange({ menubarShowTimers: c })}
+                />
+                Show timers in pills (+elapsed / countdown)
+              </label>
+
+              <div className="space-y-1.5">
+                <Label>Alternate pills every</Label>
+                <Select
+                  value={settings.menubarRotateSeconds}
+                  onChange={(e) =>
+                    onChange({ menubarRotateSeconds: Number(e.target.value) })
+                  }
+                  className="h-8 w-40 text-xs"
+                >
+                  {[5, 10, 15, 20].map((s) => (
+                    <option key={s} value={s}>
+                      {s} seconds
+                    </option>
+                  ))}
+                </Select>
+              </div>
+
+              <label className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  checked={settings.menubarIncludeReminders}
+                  onCheckedChange={(c) => onChange({ menubarIncludeReminders: c })}
+                />
+                Include reminders
+              </label>
             </div>
           )}
 

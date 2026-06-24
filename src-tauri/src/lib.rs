@@ -1,6 +1,7 @@
 mod commands;
 mod eventkit_service;
 mod github_sync;
+mod menubar;
 mod models;
 mod tray;
 
@@ -122,19 +123,32 @@ fn github_device_cancel() {
 
 // ── Menubar tray ────────────────────────────────────────────────────────────
 
+/// Push the menu-bar config from the webview. The native driver (menubar.rs) owns
+/// the actual computation/refresh so the tray stays correct while the window is
+/// hidden and the webview's timers are suspended.
 #[tauri::command]
-fn tray_update(app: tauri::AppHandle, title: Option<String>, items: Vec<tray::TrayItem>) {
-    tray::update(app, title, items);
-}
-
-#[tauri::command]
-fn tray_set_title(app: tauri::AppHandle, title: Option<String>) {
-    tray::set_title(app, title);
-}
-
-#[tauri::command]
-fn tray_set_enabled(app: tauri::AppHandle, enabled: bool) {
-    tray::set_enabled(app, enabled);
+#[allow(clippy::too_many_arguments)]
+fn tray_configure(
+    driver: tauri::State<'_, std::sync::Arc<menubar::Driver>>,
+    enabled: bool,
+    ignored_calendar_ids: Vec<String>,
+    ignored_list_ids: Vec<String>,
+    show_next: bool,
+    next_window_hours: f64,
+    show_timers: bool,
+    rotate_seconds: f64,
+    include_reminders: bool,
+) {
+    driver.configure(
+        enabled,
+        ignored_calendar_ids,
+        ignored_list_ids,
+        show_next,
+        (next_window_hours * 3_600_000.0) as i64,
+        show_timers,
+        (rotate_seconds * 1000.0) as u64,
+        include_reminders,
+    );
 }
 
 #[tauri::command]
@@ -179,9 +193,15 @@ async fn gist_push(payload: String, gist_id: Option<String>) -> Result<String, S
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let menubar_driver = std::sync::Arc::new(menubar::Driver::new());
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_store::Builder::new().build())
+        .manage(menubar_driver.clone())
+        .setup(move |app| {
+            menubar::start(app.handle().clone(), menubar_driver);
+            Ok(())
+        })
         .menu(|handle| {
             let about = MenuItem::with_id(handle, "about", "About FocalPlanner", true, None::<&str>)?;
             let settings = MenuItem::with_id(handle, "settings", "Settings…", true, Some("CmdOrCtrl+,"))?;
@@ -281,9 +301,7 @@ pub fn run() {
             gist_find,
             gist_pull,
             gist_push,
-            tray_update,
-            tray_set_title,
-            tray_set_enabled,
+            tray_configure,
             commands::open_privacy_settings,
             commands::get_access_status,
             commands::request_access,

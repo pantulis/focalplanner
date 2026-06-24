@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 project adheres to [Semantic Versioning](https://semver.org/). Update this file in
 the same commit that bumps the version for each release.
 
+## [1.4.0] — 2026-06-24
+
+### Changed
+- **Menu bar rewritten natively.** The menu-bar agenda is now computed by a native
+  background driver instead of the webview, so it keeps updating (and finished events
+  disappear on time) even while the window is hidden. Fixes a finished event lingering
+  in the menu bar indefinitely.
+
+### Added
+- **NOW / NEXT pills.** The current event shows a red **NOW** pill with the time elapsed
+  since it started; the next event within a look-ahead window shows a green **NEXT** pill
+  with a countdown. When both apply they alternate.
+- **Menubar settings pane.** New Settings → Menubar with: show in menu bar, show the NEXT
+  pill, look-ahead window, show pill timers, alternate interval, and include reminders.
+
 ## [1.3.0] — 2026-06-23
 
 ### Added

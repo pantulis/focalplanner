@@ -29,6 +29,16 @@ export interface Settings {
   inspectorContextHours: number;
   /** Show the current event/reminder and today's agenda in the macOS menu bar. */
   menubarEnabled: boolean;
+  /** Show the next upcoming event (NEXT pill) in the menu bar. */
+  menubarShowNext: boolean;
+  /** How many hours ahead to look for the NEXT event. */
+  menubarNextWindowHours: number;
+  /** Show the elapsed / countdown timers inside the NOW / NEXT pills. */
+  menubarShowTimers: boolean;
+  /** Seconds between alternating menu-bar pills when more than one applies. */
+  menubarRotateSeconds: number;
+  /** Include reminders (not just events) in the menu bar. */
+  menubarIncludeReminders: boolean;
   /** Layout of the Time Sector planner. */
   plannerLayout: PlannerLayout;
   /** Animated bird/fish silhouettes drifting across the planner lanes. */
@@ -66,6 +76,11 @@ export const DEFAULT_SETTINGS: Settings = {
   scale: 1,
   inspectorContextHours: 2,
   menubarEnabled: true,
+  menubarShowNext: true,
+  menubarNextWindowHours: 3,
+  menubarShowTimers: true,
+  menubarRotateSeconds: 10,
+  menubarIncludeReminders: true,
   plannerLayout: "swimlanes",
   plannerAnimations: true,
   areaOrder: [],

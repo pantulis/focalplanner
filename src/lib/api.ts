@@ -145,12 +145,6 @@ export interface AboutInfo {
   devBuild: boolean;
 }
 
-export interface TrayItemDto {
-  kind: "event" | "reminder";
-  id: string;
-  label: string;
-}
-
 export const api = {
   startChangeObserver: () => invoke<void>("start_change_observer"),
   aboutInfo: () => invoke<AboutInfo>("about_info"),
@@ -161,11 +155,17 @@ export const api = {
   openCalendar: (date?: string | null) =>
     invoke<void>("open_calendar", { date: date ?? null }),
 
-  // Menubar tray
-  trayUpdate: (title: string | null, items: TrayItemDto[]) =>
-    invoke<void>("tray_update", { title, items }),
-  traySetTitle: (title: string | null) => invoke<void>("tray_set_title", { title }),
-  traySetEnabled: (enabled: boolean) => invoke<void>("tray_set_enabled", { enabled }),
+  // Menubar tray — push config; the native Rust driver computes/refreshes it.
+  trayConfigure: (cfg: {
+    enabled: boolean;
+    ignoredCalendarIds: string[];
+    ignoredListIds: string[];
+    showNext: boolean;
+    nextWindowHours: number;
+    showTimers: boolean;
+    rotateSeconds: number;
+    includeReminders: boolean;
+  }) => invoke<void>("tray_configure", cfg),
 
   // GitHub preference sync
   githubDeviceStart: () => invoke<DeviceStart>("github_device_start"),

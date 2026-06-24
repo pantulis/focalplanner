@@ -130,11 +130,16 @@ function Planner() {
   const queryClient = useQueryClient();
   const { update, dismiss: dismissUpdate } = useUpdateCheck();
 
-  useMenubarTray(
-    settingsLoaded && settings.menubarEnabled,
-    settings.ignoredCalendarIds,
-    settings.ignoredListIds,
-  );
+  useMenubarTray({
+    enabled: settingsLoaded && settings.menubarEnabled,
+    ignoredCalendarIds: settings.ignoredCalendarIds,
+    ignoredListIds: settings.ignoredListIds,
+    showNext: settings.menubarShowNext,
+    nextWindowHours: settings.menubarNextWindowHours,
+    showTimers: settings.menubarShowTimers,
+    rotateSeconds: settings.menubarRotateSeconds,
+    includeReminders: settings.menubarIncludeReminders,
+  });
 
   const sync = useSyncController({
     settings,

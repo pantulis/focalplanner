@@ -36,6 +36,8 @@ pub fn install(app: AppHandle) {
 
         let block = RcBlock::new(move |_note: NonNull<NSNotification>| {
             let _ = app.emit("eventkit-changed", ());
+            // Refresh the native menu-bar driver too (the webview may be suspended).
+            crate::menubar::wake(&app);
         });
 
         unsafe {
