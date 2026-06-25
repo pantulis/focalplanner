@@ -646,7 +646,15 @@ function Planner() {
     initialStart: Date | null;
     initialEnd: Date | null;
     initialCalendarId: string | null;
-  }>({ open: false, event: null, initialStart: null, initialEnd: null, initialCalendarId: null });
+    initialAllDay: boolean;
+  }>({
+    open: false,
+    event: null,
+    initialStart: null,
+    initialEnd: null,
+    initialCalendarId: null,
+    initialAllDay: false,
+  });
   const [reminderDialog, setReminderDialog] = useState<{
     open: boolean;
     reminder: ReminderDto | null;
@@ -662,16 +670,24 @@ function Planner() {
     initialStart: Date | null = null,
     initialEnd: Date | null = null,
     initialCalendarId: string | null = null,
+    initialAllDay = false,
   ) {
     setReminderDialog({ open: false, reminder: null, initialDue: null, initialListId: null });
-    setEventDialog({ open: true, event, initialStart, initialEnd, initialCalendarId });
+    setEventDialog({ open: true, event, initialStart, initialEnd, initialCalendarId, initialAllDay });
   }
   function openReminderEditor(
     reminder: ReminderDto | null,
     initialDue: string | null = null,
     initialListId: string | null = null,
   ) {
-    setEventDialog({ open: false, event: null, initialStart: null, initialEnd: null, initialCalendarId: null });
+    setEventDialog({
+      open: false,
+      event: null,
+      initialStart: null,
+      initialEnd: null,
+      initialCalendarId: null,
+      initialAllDay: false,
+    });
     setReminderDialog({ open: true, reminder, initialDue, initialListId });
   }
 
@@ -1145,6 +1161,33 @@ function Planner() {
     });
   }
 
+  // Right-click an empty all-day events column → create an all-day event that day.
+  function openAllDayEventMenu(e: React.MouseEvent, day: Date) {
+    e.preventDefault();
+    const calNode = (c: CalendarDto, extra?: Partial<MenuNode>): MenuNode => ({
+      id: `new-cal-${c.id}`,
+      label: c.title,
+      colorDot: c.color,
+      onSelect: () => openEventEditor(null, day, day, c.id, true),
+      ...extra,
+    });
+    const children: MenuNode[] = eligibleCalendars.length
+      ? leadFirstNodes(eligibleCalendars, areaDefaultCalendarId, "DEFAULT", calNode)
+      : [{ id: "none", label: "No calendars in this area", disabled: true }];
+    setMenu({
+      x: e.clientX,
+      y: e.clientY,
+      items: [
+        {
+          id: "create-allday-event",
+          label: `New all-day event · ${format(day, "EEE, MMM d")}`,
+          icon: CalendarIcon,
+          children,
+        },
+      ],
+    });
+  }
+
   function submitEvent(input: EventInput) {
     const mx = input.id ? eventMx.update : eventMx.create;
     // Editing a clone only changes the clicked copy; warn afterwards.
@@ -1153,7 +1196,7 @@ function Planner() {
     mx.mutate(input, {
       onSuccess: () => {
         toast.success(input.id ? "Event updated" : "Event created");
-        setEventDialog({ open: false, event: null, initialStart: null, initialEnd: null, initialCalendarId: null });
+        setEventDialog({ open: false, event: null, initialStart: null, initialEnd: null, initialCalendarId: null, initialAllDay: false });
         if (original && group && group.length >= 2) {
           setCloneDialog({ mode: "edit-notice", event: original, group });
         }
@@ -1166,7 +1209,7 @@ function Planner() {
     eventMx.remove.mutate(id, {
       onSuccess: () => {
         toast.success("Event deleted");
-        setEventDialog({ open: false, event: null, initialStart: null, initialEnd: null, initialCalendarId: null });
+        setEventDialog({ open: false, event: null, initialStart: null, initialEnd: null, initialCalendarId: null, initialAllDay: false });
       },
       onError: fail,
     });
@@ -1175,7 +1218,7 @@ function Planner() {
   function deleteEventsByIds(ids: string[]) {
     for (const id of ids) eventMx.remove.mutate(id, { onError: fail });
     toast.success("Events deleted");
-    setEventDialog({ open: false, event: null, initialStart: null, initialEnd: null, initialCalendarId: null });
+    setEventDialog({ open: false, event: null, initialStart: null, initialEnd: null, initialCalendarId: null, initialAllDay: false });
   }
 
   // Delete an event — for a clone, ask whether to remove one copy or all of them.
@@ -1441,6 +1484,7 @@ function Planner() {
                 }
                 onReminderDragStart={startReminderDrag}
                 onEmptyAllDayContextMenu={openAllDayReminderMenu}
+                onEmptyAllDayEventContextMenu={openAllDayEventMenu}
                 workHours={{
                   workdayStart: settings.workdayStart,
                   workdayEnd: settings.workdayEnd,
@@ -1461,6 +1505,7 @@ function Planner() {
               initialStart={eventDialog.initialStart}
               initialEnd={eventDialog.initialEnd}
               initialCalendarId={eventDialog.initialCalendarId}
+              initialAllDay={eventDialog.initialAllDay}
               defaultCalendarId={areaDefaultCalendarId}
               calendars={eligibleCalendars}
               onSubmit={submitEvent}

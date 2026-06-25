@@ -57,6 +57,8 @@ interface Props {
   onReminderDragStart: (e: React.PointerEvent, reminder: ReminderDto) => void;
   /** Right-click an empty All-day tasks column → create a date-only reminder there. */
   onEmptyAllDayContextMenu: (e: React.MouseEvent, day: Date) => void;
+  /** Right-click empty space in the all-day EVENTS row → create an all-day event. */
+  onEmptyAllDayEventContextMenu: (e: React.MouseEvent, day: Date) => void;
   /** All-day column to highlight while a reminder is dragged in from the sidebar/tray. */
   allDayHighlightDay?: number | null;
   workHours: {
@@ -160,6 +162,7 @@ export function TimeGridView({
   dropPreview,
   onReminderDragStart,
   onEmptyAllDayContextMenu,
+  onEmptyAllDayEventContextMenu,
   allDayHighlightDay,
   workHours,
   allDayEventsHeight,
@@ -525,8 +528,8 @@ export function TimeGridView({
         ))}
       </div>
 
-      {/* All-day / undated row */}
-      {anyAllDay && (
+      {/* All-day / undated row — always shown so empty space is right-clickable. */}
+      {(
         <div
           ref={allDayEventsRef}
           className="grid border-b border-border"
@@ -542,6 +545,7 @@ export function TimeGridView({
           {days.map((d, i) => (
             <div
               key={d.toISOString()}
+              onContextMenu={(e) => onEmptyAllDayEventContextMenu(e, d)}
               className={cn(
                 "min-h-7 min-w-0 flex-1 space-y-0.5 overflow-y-auto border-l border-border p-1",
                 columnTint(d),
@@ -558,7 +562,10 @@ export function TimeGridView({
                   exit={POOF_EXIT}
                   transition={POOF_TRANSITION}
                   onClick={() => onEditEvent(e)}
-                  onContextMenu={(ev) => onEventContextMenu(ev, e)}
+                  onContextMenu={(ev) => {
+                    ev.stopPropagation();
+                    onEventContextMenu(ev, e);
+                  }}
                   onMouseEnter={(ev) => showHover(ev, { kind: "event", event: e })}
                   onMouseMove={(ev) => showHover(ev, { kind: "event", event: e })}
                   onMouseLeave={hideHover}

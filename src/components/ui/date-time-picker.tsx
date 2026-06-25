@@ -18,6 +18,8 @@ interface Props {
   onHourChange: (hour: string) => void;
   onMinuteChange: (minute: string) => void;
   weekStartsOn?: 0 | 1;
+  /** All-day mode: show only the calendar (no time selects) and a date-only label. */
+  dateOnly?: boolean;
 }
 
 const HOURS = Array.from({ length: 24 }, (_, h) => String(h).padStart(2, "0"));
@@ -37,6 +39,7 @@ export function DateTimePicker({
   onHourChange,
   onMinuteChange,
   weekStartsOn = 1,
+  dateOnly = false,
 }: Props) {
   const [open, setOpen] = useState(false);
 
@@ -45,7 +48,7 @@ export function DateTimePicker({
     minute && !MINUTES.includes(minute) ? [...MINUTES, minute].sort() : MINUTES;
 
   const label = date
-    ? hour
+    ? hour && !dateOnly
       ? format(parseISO(`${date}T${hour}:${minute || "00"}`), "EEE, MMM d · HH:mm")
       : format(parseISO(date), "EEE, MMM d")
     : "No due date";
@@ -84,46 +87,48 @@ export function DateTimePicker({
         defaultMonth={date ? parseISO(date) : undefined}
         weekStartsOn={weekStartsOn}
       />
-      <div className="mt-1 flex items-center gap-2 border-t border-border pt-3">
-        <Clock className="size-4 shrink-0 text-muted-foreground" />
-        <Select
-          value={hour}
-          onChange={(e) => onHourChange(e.target.value)}
-          className="h-8 w-16 text-sm"
-          aria-label="Hour"
-          disabled={!date}
-        >
-          <option value="">--</option>
-          {HOURS.map((h) => (
-            <option key={h} value={h}>
-              {h}
-            </option>
-          ))}
-        </Select>
-        <span className="text-muted-foreground">:</span>
-        <Select
-          value={minute}
-          onChange={(e) => onMinuteChange(e.target.value)}
-          className="h-8 w-16 text-sm"
-          aria-label="Minute"
-          disabled={!date || !hour}
-        >
-          {minuteOptions.map((m) => (
-            <option key={m} value={m}>
-              {m}
-            </option>
-          ))}
-        </Select>
-        {date && (
-          <button
-            type="button"
-            onClick={clear}
-            className="ml-auto text-xs text-muted-foreground hover:text-foreground"
+      {!dateOnly && (
+        <div className="mt-1 flex items-center gap-2 border-t border-border pt-3">
+          <Clock className="size-4 shrink-0 text-muted-foreground" />
+          <Select
+            value={hour}
+            onChange={(e) => onHourChange(e.target.value)}
+            className="h-8 w-16 text-sm"
+            aria-label="Hour"
+            disabled={!date}
           >
-            Clear
-          </button>
-        )}
-      </div>
+            <option value="">--</option>
+            {HOURS.map((h) => (
+              <option key={h} value={h}>
+                {h}
+              </option>
+            ))}
+          </Select>
+          <span className="text-muted-foreground">:</span>
+          <Select
+            value={minute}
+            onChange={(e) => onMinuteChange(e.target.value)}
+            className="h-8 w-16 text-sm"
+            aria-label="Minute"
+            disabled={!date || !hour}
+          >
+            {minuteOptions.map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))}
+          </Select>
+          {date && (
+            <button
+              type="button"
+              onClick={clear}
+              className="ml-auto text-xs text-muted-foreground hover:text-foreground"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      )}
     </Popover>
   );
 }

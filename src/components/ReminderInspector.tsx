@@ -83,6 +83,8 @@ export function ReminderInspector({
   const [notes, setNotes] = useState("");
   const [completed, setCompleted] = useState(false);
   const [recurrence, setRecurrence] = useState<RecurrenceInput | null>(null);
+  // A reminder is "all-day" when it has a due date but no time component.
+  const [allDay, setAllDay] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -91,6 +93,7 @@ export function ReminderInspector({
     const [hh, mm] = t ? t.split(":") : ["", ""];
     setDueHour(hh ?? "");
     setDueMinute(mm || "00");
+    setAllDay(!!d && !t);
     if (reminder) {
       setTitle(reminder.title);
       setPriority(reminder.priority);
@@ -118,7 +121,7 @@ export function ReminderInspector({
 
   function submit() {
     if (!title.trim()) return;
-    const time = dueHour ? `${dueHour}:${dueMinute || "00"}` : "";
+    const time = !allDay && dueHour ? `${dueHour}:${dueMinute || "00"}` : "";
     const due = dueDate ? (time ? `${dueDate}T${time}` : dueDate) : null;
     onSubmit({
       id: reminder?.id ?? null,
@@ -195,8 +198,18 @@ export function ReminderInspector({
             onHourChange={setDueHour}
             onMinuteChange={setDueMinute}
             weekStartsOn={weekStartsOn}
+            dateOnly={allDay}
           />
         </div>
+
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={allDay}
+            onChange={(e) => setAllDay(e.target.checked)}
+          />
+          All-day
+        </label>
 
         {dueDate ? (
           <RecurrencePicker

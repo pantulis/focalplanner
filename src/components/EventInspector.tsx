@@ -47,6 +47,8 @@ interface Props {
   initialEnd?: Date | null;
   /** Pre-selects the calendar when creating (e.g. "Create event in →"). */
   initialCalendarId?: string | null;
+  /** Pre-check the all-day box when creating (e.g. from the all-day row). */
+  initialAllDay?: boolean;
   /** Active area's default calendar; leads the picker and is the creation fallback. */
   defaultCalendarId?: string | null;
   calendars: CalendarDto[];
@@ -87,6 +89,7 @@ export function EventInspector({
   initialStart,
   initialEnd,
   initialCalendarId,
+  initialAllDay,
   defaultCalendarId,
   calendars,
   onSubmit,
@@ -140,7 +143,7 @@ export function EventInspector({
       setTitle("");
       setStartDate(s.date); setStartHour(s.hour); setStartMinute(s.minute);
       setEndDate(e.date); setEndHour(e.hour); setEndMinute(e.minute);
-      setAllDay(false);
+      setAllDay(initialAllDay ?? false);
       setCalendarId(initialCalendarId ?? defaultCalendarId ?? editable[0]?.id ?? "");
       setLocation("");
       setNotes("");
@@ -152,12 +155,16 @@ export function EventInspector({
 
   function submit() {
     if (!title.trim()) return;
+    // All-day events carry no meaningful time; pin to midnight (EventKit ignores
+    // the time component when all_day is set).
     const startVal = startDate
-      ? `${startDate}T${startHour || "00"}:${startMinute || "00"}`
+      ? `${startDate}T${allDay ? "00:00" : `${startHour || "00"}:${startMinute || "00"}`}`
       : defaultStart();
     const endVal = endDate
-      ? `${endDate}T${endHour || "00"}:${endMinute || "00"}`
-      : plusHour(startVal);
+      ? `${endDate}T${allDay ? "00:00" : `${endHour || "00"}:${endMinute || "00"}`}`
+      : allDay
+        ? `${startDate}T00:00`
+        : plusHour(startVal);
     onSubmit({
       id: event?.id ?? null,
       title: title.trim(),
@@ -224,6 +231,7 @@ export function EventInspector({
             onHourChange={setStartHour}
             onMinuteChange={setStartMinute}
             weekStartsOn={weekStartsOn}
+            dateOnly={allDay}
           />
         </div>
 
@@ -237,6 +245,7 @@ export function EventInspector({
             onHourChange={setEndHour}
             onMinuteChange={setEndMinute}
             weekStartsOn={weekStartsOn}
+            dateOnly={allDay}
           />
         </div>
 
