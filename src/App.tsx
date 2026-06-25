@@ -91,6 +91,7 @@ import { AboutDialog } from "@/components/AboutDialog";
 
 export default function App() {
   const access = useAccessStatus();
+  const queryClient = useQueryClient();
   const granted =
     access.data &&
     (access.data.events === "fullAccess" ||
@@ -110,7 +111,7 @@ export default function App() {
         status={
           access.data ?? { events: "notDetermined", reminders: "notDetermined" }
         }
-        onGranted={() => access.refetch()}
+        onGranted={(s) => queryClient.setQueryData(["access"], s)}
       />
     );
   }
@@ -1153,7 +1154,7 @@ function Planner() {
       items: [
         {
           id: "create-allday-reminder",
-          label: `New reminder · ${format(day, "EEE, MMM d")}`,
+          label: "New all-day reminder",
           icon: ListTodo,
           children,
         },
@@ -1180,7 +1181,7 @@ function Planner() {
       items: [
         {
           id: "create-allday-event",
-          label: `New all-day event · ${format(day, "EEE, MMM d")}`,
+          label: "New all-day event",
           icon: CalendarIcon,
           children,
         },

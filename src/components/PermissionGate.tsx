@@ -8,7 +8,7 @@ import { api, type AccessStatus } from "@/lib/api";
 
 interface Props {
   status: AccessStatus;
-  onGranted: () => void;
+  onGranted: (status: AccessStatus) => void;
 }
 
 export function PermissionGate({ status, onGranted }: Props) {
@@ -35,7 +35,9 @@ export function PermissionGate({ status, onGranted }: Props) {
     try {
       const next = await api.requestAccess();
       if (next.events === "fullAccess" || next.reminders === "fullAccess") {
-        onGranted();
+        // Pass the authoritative status up; the App seeds it into the query cache
+        // so the gate advances without re-reading the (briefly lagging) TCC status.
+        onGranted(next);
       }
     } finally {
       setRequesting(false);
