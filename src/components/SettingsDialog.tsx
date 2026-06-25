@@ -32,6 +32,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { geocodeCity } from "@/lib/weather";
 import { cn } from "@/lib/utils";
 
 export type Pane =
@@ -39,6 +40,7 @@ export type Pane =
   | "areas"
   | "calendars"
   | "menubar"
+  | "weather"
   | "appearance"
   | "sync";
 
@@ -67,6 +69,7 @@ const PANES: { id: Pane; label: string }[] = [
   { id: "areas", label: "Areas of Focus" },
   { id: "calendars", label: "Calendars" },
   { id: "menubar", label: "Menubar" },
+  { id: "weather", label: "Weather" },
   { id: "appearance", label: "Appearance" },
   { id: "sync", label: "Sync" },
 ];
@@ -116,10 +119,41 @@ export function SettingsDialog({
   const [pane, setPane] = useState<Pane>("general");
   const [passphrase, setPassphrase] = useState("");
 
+  // Weather location lookup (Open-Meteo geocoding).
+  const [weatherCity, setWeatherCity] = useState(settings.weatherPlace ?? "");
+  const [geoBusy, setGeoBusy] = useState(false);
+  const [geoError, setGeoError] = useState<string | null>(null);
+
   // Jump to the requested pane each time the dialog opens.
   useEffect(() => {
     if (open) setPane(initialPane ?? "general");
   }, [open, initialPane]);
+
+  // Keep the city input in sync with the resolved place when the dialog reopens.
+  useEffect(() => {
+    if (open) setWeatherCity(settings.weatherPlace ?? "");
+  }, [open, settings.weatherPlace]);
+
+  async function resolveWeatherCity() {
+    const q = weatherCity.trim();
+    if (!q) return;
+    setGeoBusy(true);
+    setGeoError(null);
+    try {
+      const matches = await geocodeCity(q);
+      if (matches.length === 0) {
+        setGeoError("No matching place found.");
+        return;
+      }
+      const m = matches[0];
+      onChange({ weatherLat: m.lat, weatherLon: m.lon, weatherPlace: m.label });
+      setWeatherCity(m.label);
+    } catch {
+      setGeoError("Lookup failed — check your connection.");
+    } finally {
+      setGeoBusy(false);
+    }
+  }
 
   async function doPull(force: boolean) {
     if (force && !window.confirm("Replace local preferences with the synced copy?")) return;
@@ -397,6 +431,70 @@ export function SettingsDialog({
                 />
                 Include reminders
               </label>
+            </div>
+          )}
+
+          {pane === "weather" && (
+            <div className="space-y-5">
+              <label className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  checked={settings.weatherEnabled}
+                  onCheckedChange={(c) => onChange({ weatherEnabled: c })}
+                />
+                Show weather on the calendar
+              </label>
+
+              <div className="space-y-1.5">
+                <Label>Location</Label>
+                <div className="flex gap-2">
+                  <Input
+                    value={weatherCity}
+                    onChange={(e) => setWeatherCity(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        void resolveWeatherCity();
+                      }
+                    }}
+                    placeholder="City, e.g. Madrid"
+                    className="h-8 w-56 text-xs"
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void resolveWeatherCity()}
+                    disabled={geoBusy}
+                  >
+                    {geoBusy ? "Finding…" : "Find"}
+                  </Button>
+                </div>
+                {settings.weatherPlace && !geoError && (
+                  <p className="text-xs text-muted-foreground">
+                    Forecasting for {settings.weatherPlace}
+                  </p>
+                )}
+                {geoError && <p className="text-xs text-destructive">{geoError}</p>}
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Units</Label>
+                <Select
+                  value={settings.weatherUnit}
+                  onChange={(e) =>
+                    onChange({
+                      weatherUnit: e.target.value as "celsius" | "fahrenheit",
+                    })
+                  }
+                  className="h-8 w-40 text-xs"
+                >
+                  <option value="celsius">Celsius (°C)</option>
+                  <option value="fahrenheit">Fahrenheit (°F)</option>
+                </Select>
+              </div>
+
+              <p className="text-xs text-muted-foreground">
+                Weather data by Open-Meteo.com (CC BY 4.0).
+              </p>
             </div>
           )}
 

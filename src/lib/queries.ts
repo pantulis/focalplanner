@@ -8,6 +8,7 @@ import {
   type EventInput,
   type ReminderInput,
 } from "./api";
+import { fetchForecast, type WeatherUnit } from "./weather";
 
 export function useAccessStatus() {
   return useQuery({ queryKey: ["access"], queryFn: api.getAccessStatus });
@@ -43,6 +44,21 @@ export function useReminders(
     queryKey: ["reminders", listIds, includeCompleted],
     queryFn: () => api.fetchReminders(listIds, includeCompleted),
     enabled,
+  });
+}
+
+export function useWeather(
+  lat: number | null,
+  lon: number | null,
+  unit: WeatherUnit,
+  enabled: boolean,
+) {
+  return useQuery({
+    queryKey: ["weather", lat, lon, unit],
+    queryFn: () => fetchForecast(lat!, lon!, unit),
+    enabled: enabled && lat != null && lon != null,
+    staleTime: 30 * 60_000,
+    refetchInterval: 30 * 60_000,
   });
 }
 

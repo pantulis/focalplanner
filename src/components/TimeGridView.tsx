@@ -6,6 +6,7 @@ import { Circle, CircleCheck, EyeOff, MapPin, MoveHorizontal, Repeat, Video } fr
 import type { EventDto, ReminderDto } from "@/lib/api";
 import { cloneKey } from "@/lib/clones";
 import { AREAS, isMember, type Area, type AreaConfig } from "@/lib/areas";
+import { weatherIcon, weatherLabel, type WeatherDay } from "@/lib/weather";
 import { findMeetingLink } from "@/lib/meeting";
 import {
   GridBlock,
@@ -36,6 +37,10 @@ interface Props {
   cloneGroups: Map<string, EventDto[]>;
   /** Area-of-focus membership, for the hover card's per-calendar area pills. */
   areaConfig: AreaConfig;
+  /** Currently-viewed area id (or "all"); selects which area pill the hover shows. */
+  activeArea: string;
+  /** Daily forecast keyed by local YYYY-MM-DD; undefined when weather is off. */
+  weatherByDay?: Map<string, WeatherDay>;
   onEditEvent: (event: EventDto) => void;
   onEditReminder: (reminder: ReminderDto) => void;
   onToggleReminder: (reminder: ReminderDto, completed: boolean) => void;
@@ -141,6 +146,8 @@ export function TimeGridView({
   onZoomChange,
   cloneGroups,
   areaConfig,
+  activeArea,
+  weatherByDay,
   onEditEvent,
   onEditReminder,
   onToggleReminder,
@@ -500,8 +507,11 @@ export function TimeGridView({
                 <MoveHorizontal className="size-3" />
               </button>
             )}
-            <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
-              {format(d, "EEE")}
+            <div className="flex items-center justify-between gap-1">
+              <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                {format(d, "EEE")}
+              </span>
+              <DayWeather day={d} weatherByDay={weatherByDay} />
             </div>
             <div
               className={cn(
@@ -828,7 +838,14 @@ export function TimeGridView({
         )}
       </div>
 
-      {hover && <HoverCard {...hover} cloneGroups={cloneGroups} areaConfig={areaConfig} />}
+      {hover && (
+        <HoverCard
+          {...hover}
+          cloneGroups={cloneGroups}
+          areaConfig={areaConfig}
+          activeArea={activeArea}
+        />
+      )}
     </div>
   );
 }
@@ -843,10 +860,53 @@ interface ReminderHover {
 }
 type HoverInfo = EventHover | ReminderHover;
 
+/** Compact forecast (icon + high/low) under a day header; nothing outside the
+ * ~16-day forecast window or when weather is disabled. */
+function DayWeather({
+  day,
+  weatherByDay,
+}: {
+  day: Date;
+  weatherByDay?: Map<string, WeatherDay>;
+}) {
+  const w = weatherByDay?.get(format(day, "yyyy-MM-dd"));
+  if (!w) return null;
+  const Icon = weatherIcon(w.code);
+  return (
+    <div
+      className="flex shrink-0 items-center gap-1 whitespace-nowrap text-[10px] text-muted-foreground"
+      title={`${weatherLabel(w.code)} · ${Math.round(w.tempMax)}° / ${Math.round(w.tempMin)}°`}
+    >
+      <Icon className="size-3 shrink-0" />
+      <span className="tabular-nums">{Math.round(w.tempMax)}°</span>
+      <span className="tabular-nums opacity-60">{Math.round(w.tempMin)}°</span>
+    </div>
+  );
+}
+
 /** The areas of focus a calendar is assigned to (many-to-many; may be empty). */
 function areasForCalendar(config: AreaConfig, calendarId: string | null): Area[] {
   if (!calendarId) return [];
   return AREAS.filter((a) => isMember(config, a.id, "calendar", calendarId));
+}
+
+/**
+ * The single area pill to show for a calendar: the currently-viewed area when the
+ * calendar belongs to it, otherwise (or in the All-Areas view) its first assigned
+ * area. Undefined when the calendar has no area.
+ */
+function pillAreaForCalendar(
+  config: AreaConfig,
+  calendarId: string | null,
+  activeArea: string,
+): Area | undefined {
+  const areas = areasForCalendar(config, calendarId);
+  if (areas.length === 0) return undefined;
+  if (activeArea !== "all") {
+    const active = areas.find((a) => a.id === activeArea);
+    if (active) return active;
+  }
+  return areas[0];
 }
 
 function HoverCard({
@@ -855,12 +915,14 @@ function HoverCard({
   info,
   cloneGroups,
   areaConfig,
+  activeArea,
 }: {
   x: number;
   y: number;
   info: HoverInfo;
   cloneGroups: Map<string, EventDto[]>;
   areaConfig: AreaConfig;
+  activeArea: string;
 }) {
   const flipX = x > window.innerWidth - 280;
   const style: CSSProperties = {
@@ -920,21 +982,20 @@ function HoverCard({
       {info.kind === "event" ? (
         <div className="mt-1 space-y-1">
           {eventMembers.map((m, idx) => {
-            const areas = areasForCalendar(areaConfig, m.calendarId);
+            const area = pillAreaForCalendar(areaConfig, m.calendarId, activeArea);
             return (
               <div
                 key={m.id ?? idx}
                 className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground"
               >
-                {areas.map((a) => (
+                {area && (
                   <span
-                    key={a.id}
                     className="shrink-0 rounded px-1.5 py-px text-[10px] font-medium text-white"
-                    style={{ backgroundColor: a.color }}
+                    style={{ backgroundColor: area.color }}
                   >
-                    {a.label}
+                    {area.label}
                   </span>
-                ))}
+                )}
                 <span className="truncate">{m.calendarTitle ?? "Unknown calendar"}</span>
                 {recurring && idx === 0 && <Repeat className="size-3 shrink-0" />}
               </div>

@@ -55,6 +55,14 @@ export interface Settings {
   areaDefaultCalendarId: Record<string, string>;
   /** Default reminder list per area of focus (area id → list id). */
   areaDefaultListId: Record<string, string>;
+  /** Show a daily weather forecast (Open-Meteo) in the Daily/Weekly day headers. */
+  weatherEnabled: boolean;
+  /** Resolved forecast location (via Open-Meteo geocoding); null until a city is set. */
+  weatherLat: number | null;
+  weatherLon: number | null;
+  /** Human label for the resolved location, e.g. "Madrid, Spain". */
+  weatherPlace: string;
+  weatherUnit: "celsius" | "fahrenheit";
   /** GitHub sync bookkeeping (not secret; the token lives in the Keychain). */
   syncGistId?: string;
   syncUpdatedAt?: string;
@@ -89,6 +97,11 @@ export const DEFAULT_SETTINGS: Settings = {
   areaWorkWeek: {},
   areaDefaultCalendarId: {},
   areaDefaultListId: {},
+  weatherEnabled: false,
+  weatherLat: null,
+  weatherLon: null,
+  weatherPlace: "",
+  weatherUnit: "celsius",
   autoSync: true,
 };
 

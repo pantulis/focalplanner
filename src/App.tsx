@@ -39,6 +39,7 @@ import {
   useCalendars,
   useEvents,
   useReminders,
+  useWeather,
   useEventMutations,
   useReminderMutations,
 } from "@/lib/queries";
@@ -345,6 +346,12 @@ function Planner() {
 
   const events = useEvents(range.start, range.end, undefined, true);
   const reminders = useReminders(undefined, settings.showCompletedReminders, true);
+  const weather = useWeather(
+    settings.weatherLat,
+    settings.weatherLon,
+    settings.weatherUnit,
+    settings.weatherEnabled,
+  );
 
   const eventMx = useEventMutations();
   const reminderMx = useReminderMutations();
@@ -1417,6 +1424,8 @@ function Planner() {
                 onEmptyContextMenu={openEmptyEventMenu}
                 cloneGroups={eventClones}
                 areaConfig={areaConfig}
+                activeArea={activeArea}
+                weatherByDay={settings.weatherEnabled ? weather.data : undefined}
                 onCreateRange={(start, end, x, y) => showCreateMenu(start, end, x, y)}
                 onUpdateTimes={updateEventTimes}
                 onUpdateReminderDue={updateReminderDue}
