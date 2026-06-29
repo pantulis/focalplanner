@@ -6,6 +6,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 project adheres to [Semantic Versioning](https://semver.org/). Update this file in
 the same commit that bumps the version for each release.
 
+## [1.5.0] — 2026-06-29
+
+### Added
+- **Weather forecast on the calendar.** Opt-in and keyless (via Open-Meteo). A new
+  Settings → Weather pane lets you enable it, look up your city, and choose °C/°F. The
+  Daily and Weekly day headers then show each in-range day's forecast (icon + high/low)
+  to the right of the weekday.
+- **All-day creation.** The all-day row is always shown; right-click it to create a
+  **New all-day event** for an area's calendar. The event and reminder inspectors gain
+  an all-day checkbox that hides the time pickers (events pin to midnight; reminders
+  save a date-only due).
+
+### Changed
+- **Menu-bar dropdown polish.** Real calendar/reminder icons (tinted to the label
+  color) replace the emoji; all-day items sort after timed ones with a divider; event
+  times no longer show 2h off; cloned events (same title and time across calendars)
+  collapse to one entry; locally-hidden events are omitted unless "show hidden" is on.
+- **Event hover card** shows a single focus-area pill — the active area, or the
+  calendar's first assigned area — instead of listing every area.
+- **More shortcuts.** Navigate areas with ⌘↓/⌘↑, and toggle the Reminders sidebar with
+  ⌘⌥S (also a Reminders-menu checkbox).
+- The feature tour gains a **Skip tour** button, and the About dialog is reachable from
+  the permission gate (so a stuck user can still read the version).
+
+### Fixed
+- **Permission gate** reliably advances after you grant access. The authoritative status
+  from the grant is now seeded directly into the app, instead of re-reading a status
+  that can briefly lag and leave the gate stuck.
+
 ## [1.4.0] — 2026-06-24
 
 ### Changed
